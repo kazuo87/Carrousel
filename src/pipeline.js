@@ -150,21 +150,35 @@ export class Pipeline {
 
   async createArticle({ record, score, reasons }, topic) {
     const id = `pmid-${record.pmid}`;
-    const language = this.config.articleLanguage;
+    const { articleLanguage: primary, languages } = this.config;
     const generated = await this.articleGenerator.generate(record, topic);
-    const image = await this.imageProvider.generate({ id, record, topic, article: generated });
+    const main = generated.content[primary] ?? generated.content[Object.keys(generated.content)[0]];
+    const image = await this.imageProvider.generate({
+      id,
+      record,
+      topic,
+      article: { imagePrompt: generated.imagePrompt, imageAlt: main.imageAlt },
+    });
+    const content = Object.fromEntries(
+      Object.entries(generated.content).map(([lang, c]) => {
+        const { imageAlt, ...rest } = c;
+        return [lang, rest];
+      }),
+    );
+    const alts = Object.fromEntries(Object.entries(generated.content).map(([lang, c]) => [lang, c.imageAlt]));
+    const { imageAlt: _mainAlt, ...mainFields } = main;
     const article = {
       id,
       createdAt: new Date(this.now()).toISOString(),
-      language: generated.language ?? language,
-      topic: { id: topic.id, label: topic.label[language] ?? topic.id, theme: topic.theme, hue: topic.hue },
-      title: generated.title,
-      dek: generated.dek,
-      summary: generated.summary,
-      sections: generated.sections,
-      keyPoints: generated.keyPoints,
-      tags: generated.tags,
-      image,
+      language: primary,
+      languages: Object.keys(content),
+      // Langue du corps du texte quand elle diffère des versions (générateur extractif : anglais).
+      bodyLanguage: generated.bodyLanguage ?? null,
+      topic: { id: topic.id, label: topic.label[primary] ?? topic.id, labels: topic.label, theme: topic.theme, hue: topic.hue },
+      // Champs de premier niveau = version dans la langue principale (compatibilité).
+      ...mainFields,
+      content,
+      image: { ...image, alts },
       generator: generated.generator,
       relevance: { score, reasons },
       source: {

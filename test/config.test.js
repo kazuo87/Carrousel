@@ -11,6 +11,7 @@ test("buildConfig : valeurs par défaut", () => {
   assert.equal(cfg.intervalMinutes, 6);
   assert.equal(cfg.port, 3000);
   assert.equal(cfg.articleLanguage, "fr");
+  assert.deepEqual(cfg.languages, ["fr", "en", "ar"]);
   assert.equal(cfg.claude.model, "claude-opus-5-5");
   assert.equal(cfg.claude.effort, "medium");
   assert.equal(cfg.image.provider, "svg");
@@ -29,6 +30,10 @@ test("buildConfig : surcharge et validation", () => {
   assert.throws(() => buildConfig({ INTERVAL_MINUTES: "0" }), /INTERVAL_MINUTES/);
   assert.throws(() => buildConfig({ INTERVAL_MINUTES: "abc" }), /INTERVAL_MINUTES/);
   assert.throws(() => buildConfig({ ARTICLE_LANGUAGE: "de" }), /ARTICLE_LANGUAGE/);
+  assert.throws(() => buildConfig({ LANGUAGES: "fr,de" }), /LANGUAGES/);
+  assert.throws(() => buildConfig({ LANGUAGES: "fr", ARTICLE_LANGUAGE: "en" }), /ARTICLE_LANGUAGE/);
+  assert.equal(buildConfig({ LANGUAGES: "ar,en" }).articleLanguage, "ar", "langue principale = première de la liste");
+  assert.deepEqual(buildConfig({ LANGUAGES: " en , fr " }).languages, ["en", "fr"]);
   assert.throws(() => buildConfig({ IMAGE_PROVIDER: "dalle" }), /IMAGE_PROVIDER/);
   assert.throws(() => buildConfig({ CLAUDE_EFFORT: "ultra" }), /CLAUDE_EFFORT/);
   assert.throws(() => buildConfig({ CLAUDE_FALLBACKS: "maybe" }), /CLAUDE_FALLBACKS/);

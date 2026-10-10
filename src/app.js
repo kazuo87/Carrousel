@@ -19,7 +19,7 @@ export async function createApp({ withScheduler = true } = {}) {
   const topics = getTopics(config.topics);
   const store = await new Store({ dataDir: config.dataDir, imagesDir: config.imagesDir, maxArticles: config.maxArticles }).init();
   const pubmed = new PubMedClient({ ...config.pubmed });
-  const articleGenerator = new ArticleGenerator({ claude: config.claude, language: config.articleLanguage });
+  const articleGenerator = new ArticleGenerator({ claude: config.claude, languages: config.languages });
   const imageProvider = createImageProvider(config, { language: config.articleLanguage });
   const pipeline = new Pipeline({ config, store, pubmed, articleGenerator, imageProvider, topics });
   const scheduler = withScheduler
@@ -32,6 +32,7 @@ export async function createApp({ withScheduler = true } = {}) {
     image: config.image.provider === "openai" ? `openai:${config.image.openaiModel}` : "svg",
     pubmed: config.pubmed.baseUrl,
     topics: topics.map((t) => t.id),
+    languages: config.languages,
   };
   // Sans planificateur (mode « serve »), les déclenchements manuels ne doivent pas se chevaucher.
   let manualRun = null;
@@ -42,7 +43,7 @@ export async function createApp({ withScheduler = true } = {}) {
     return manualRun;
   };
   const server = createServer({ config, store, scheduler, runNow, topics, meta });
-  log.info(`Générateur d'articles : ${meta.article} · images : ${meta.image} · sujets : ${meta.topics.join(", ")}`);
+  log.info(`Générateur d'articles : ${meta.article} · images : ${meta.image} · langues : ${config.languages.join(", ")} · sujets : ${meta.topics.join(", ")}`);
   if (!config.pubmed.email) log.warn("NCBI_EMAIL non défini : recommandé par NCBI pour identifier l'outil");
   if (!config.adminToken && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
     log.warn("ADMIN_TOKEN non défini : POST /api/run n'est accepté que depuis une connexion locale directe");

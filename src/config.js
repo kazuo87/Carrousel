@@ -9,6 +9,9 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.resolve(here, "..");
 
+/** Langues prises en charge (interface, sujets, rédaction). */
+export const SUPPORTED_LANGUAGES = ["fr", "en", "ar"];
+
 /** Charge un fichier .env minimaliste (KEY=value, # commentaires) sans écraser l'environnement existant. */
 export function loadDotEnv(file = path.join(ROOT_DIR, ".env")) {
   if (!fs.existsSync(file)) return;
@@ -71,8 +74,9 @@ export function buildConfig(env = process.env) {
       host: str("HOST", "0.0.0.0"),
       adminToken: str("ADMIN_TOKEN", ""),
 
-      // Contenu
-      articleLanguage: str("ARTICLE_LANGUAGE", "fr"),
+      // Contenu : langues générées (la première est la langue principale / par défaut de l'interface)
+      languages: list("LANGUAGES", ["fr", "en", "ar"]),
+      articleLanguage: str("ARTICLE_LANGUAGE", ""),
       topics: list("TOPICS", []), // vide = tous les sujets
       maxArticles: num("MAX_ARTICLES", 500),
       dataDir,
@@ -117,7 +121,14 @@ export function buildConfig(env = process.env) {
       logLevel: str("LOG_LEVEL", "info"),
     };
     if (cfg.intervalMinutes <= 0) throw new Error("INTERVAL_MINUTES doit être > 0");
-    if (!["fr", "en"].includes(cfg.articleLanguage)) throw new Error("ARTICLE_LANGUAGE doit valoir fr ou en");
+    const unsupported = cfg.languages.filter((l) => !SUPPORTED_LANGUAGES.includes(l));
+    if (!cfg.languages.length || unsupported.length) {
+      throw new Error(`LANGUAGES doit contenir des codes parmi ${SUPPORTED_LANGUAGES.join(", ")} (reçu : ${unsupported.join(", ") || "vide"})`);
+    }
+    if (!cfg.articleLanguage) cfg.articleLanguage = cfg.languages[0];
+    if (!cfg.languages.includes(cfg.articleLanguage)) {
+      throw new Error(`ARTICLE_LANGUAGE (${cfg.articleLanguage}) doit faire partie de LANGUAGES (${cfg.languages.join(", ")})`);
+    }
     if (!["svg", "openai"].includes(cfg.image.provider)) throw new Error("IMAGE_PROVIDER doit valoir svg ou openai");
     if (!["low", "medium", "high", "xhigh", "max"].includes(cfg.claude.effort)) {
       throw new Error("CLAUDE_EFFORT doit valoir low, medium, high, xhigh ou max");

@@ -23,7 +23,7 @@
     prev: $("prev"), next: $("next"), play: $("play"), progress: $("progress").firstElementChild,
     filters: $("filters"), empty: $("empty"), reader: $("reader"), readerContent: $("reader-content"),
     readerClose: $("reader-close"), toast: $("toast"), statusCount: $("status-count"), statusNext: $("status-next"),
-    carousel: $("carousel"),
+    carousel: $("carousel"), langSwitch: $("lang-switch"),
   };
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -59,27 +59,79 @@
       articleN: (n) => `Article ${n}`,
     },
   };
+  STRINGS.ar = {
+    title: "الدوّار العلمي",
+    subtitle: "الصيدلة · الببتيدات · الأدوية الجديدة · الأدوية الحيوية المماثلة — من PubMed / NCBI",
+    footer: "محتوى مُولَّد آليًا من ملخصات PubMed؛ لا يُعدّ نصيحة طبية. المصادر مذكورة في كل بطاقة.",
+    read: "اقرأ المقال", source: "المصدر على PubMed", published: "نُشر في", generated: "أُنشئ في",
+    next: "المقال التالي خلال", now: "جارٍ الإنشاء…", articles: (n) => (n === 1 ? "مقال واحد" : n === 2 ? "مقالان" : n <= 10 ? `${n} مقالات` : `${n} مقالًا`),
+    newArticle: "مقال جديد", keyPoints: "النقاط الرئيسية", authors: "المؤلفون", journal: "المجلة", pmid: "PMID", doi: "DOI",
+    pubTypes: "أنواع المنشور", disclaimer: "مقال مُولَّد آليًا من ملخص PubMed (الملخص فقط، وليس النص الكامل). لا يُعدّ نصيحة طبية.",
+    generatedBy: "أُنشئ بواسطة", image: "الرسم التوضيحي", autoplay: "التشغيل التلقائي", of: "من", all: "الكل",
+    prev: "المقال السابق", nextBtn: "المقال التالي", close: "إغلاق", slide: "شريحة", chooseArticle: "اختر مقالًا",
+    emptyAll: "لا توجد مقالات بعد: سيتم إنشاء أول مقال خلال لحظات.",
+    emptyFilter: "لا توجد مقالات لهذا الموضوع بعد.", loadError: "تعذّر تحميل المقالات.",
+    articleN: (n) => `المقال ${n}`, originalText: "النص الأصلي بالإنجليزية", language: "اللغة",
+  };
+  STRINGS.fr.originalText = "Texte original en anglais";
+  STRINGS.en.originalText = "Original text in English";
+  STRINGS.fr.language = "Langue";
+  STRINGS.en.language = "Language";
+  const LANG_LABELS = { fr: "FR", en: "EN", ar: "AR" };
+  const LANG_NAMES = { fr: "Français", en: "English", ar: "العربية" };
+  const LOCALES = { fr: "fr-FR", en: "en-GB", ar: "ar-u-nu-latn" };
+
   let lang = "fr";
   let T = STRINGS.fr;
   let dateFmt;
   let timeFmt;
+  const isRtl = () => lang === "ar";
 
   function setLang(next) {
     lang = STRINGS[next] ? next : "fr";
     T = STRINGS[lang];
     document.documentElement.lang = lang;
-    const locale = lang === "en" ? "en-GB" : "fr-FR";
-    dateFmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
-    timeFmt = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+    document.documentElement.dir = isRtl() ? "rtl" : "ltr";
+    dateFmt = new Intl.DateTimeFormat(LOCALES[lang], { dateStyle: "medium" });
+    timeFmt = new Intl.DateTimeFormat(LOCALES[lang], { hour: "2-digit", minute: "2-digit" });
     document.title = `${T.title} — ${T.subtitle.split(" — ")[0]}`;
     for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = T[el.dataset.i18n] ?? el.textContent;
     els.prev.setAttribute("aria-label", T.prev);
     els.next.setAttribute("aria-label", T.nextBtn);
+    els.prev.innerHTML = isRtl() ? "&#x203A;" : "&#x2039;";
+    els.next.innerHTML = isRtl() ? "&#x2039;" : "&#x203A;";
     els.readerClose.setAttribute("aria-label", T.close);
     els.play.setAttribute("aria-label", T.autoplay);
     els.dots.setAttribute("aria-label", T.chooseArticle);
-    els.carousel.setAttribute("aria-roledescription", lang === "en" ? "carousel" : "carrousel");
+    els.langSwitch.setAttribute("aria-label", T.language);
+    els.carousel.setAttribute("aria-roledescription", lang === "en" ? "carousel" : lang === "ar" ? "دوّار" : "carrousel");
+    renderLangSwitch();
   }
+
+  function renderLangSwitch() {
+    const available = (state.status && state.status.languages) || [lang];
+    els.langSwitch.innerHTML = available.map((l) =>
+      `<button type="button" data-lang="${esc(l)}" aria-pressed="${l === lang ? "true" : "false"}" lang="${esc(l)}" title="${esc(LANG_NAMES[l] || l)}">${esc(LANG_LABELS[l] || l.toUpperCase())}</button>`).join("");
+  }
+  els.langSwitch.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-lang]");
+    if (!btn || btn.dataset.lang === lang) return;
+    setLang(btn.dataset.lang);
+    // Le choix explicite de l'utilisateur est mémorisé (jamais la langue par défaut du serveur).
+    try { localStorage.setItem("carrousel-lang", lang); } catch { /* stockage indisponible */ }
+    renderFilters();
+    render();
+    updateStatus({});
+    tickCountdown();
+  });
+
+  /* Version de l'article dans la langue affichée (repli : langue principale, puis champs de premier niveau). */
+  function contentOf(article) {
+    const c = article.content || {};
+    return c[lang] || c[article.language] || c[Object.keys(c)[0]] || article;
+  }
+  const topicLabel = (t) => (t && t.labels && t.labels[lang]) || (t && t.label) || "";
+  const altOf = (article) => (article.image && ((article.image.alts && article.image.alts[lang]) || article.image.alt)) || "";
   setLang("fr");
 
   function formatDate(value) {
@@ -108,15 +160,20 @@
     }
   }
 
+  function originalNote(article) {
+    return article.bodyLanguage && article.bodyLanguage !== lang ? `<span class="original">${esc(T.originalText)}</span>` : "";
+  }
+
   function slideHtml(article, i, total) {
     const src = article.source || {};
+    const c = contentOf(article);
     const isNew = state.newIds.has(article.id);
     const sourceUrl = safeHttpUrl(src.url);
     return `
       <li class="slide" data-id="${esc(article.id)}" role="group" aria-roledescription="${T.slide}" aria-label="${i + 1} ${T.of} ${total}" data-hue="${hueOf(article)}">
         <div class="slide-media">
-          ${article.image ? `<img src="${esc(article.image.url)}" alt="${esc(article.image.alt || "")}" ${i === 0 ? "" : 'loading="lazy"'} width="1200" height="675" draggable="false">` : ""}
-          <span class="badge">${esc(article.topic ? article.topic.label : "")}</span>
+          ${article.image ? `<img src="${esc(article.image.url)}" alt="${esc(altOf(article))}" ${i === 0 ? "" : 'loading="lazy"'} width="1200" height="675" draggable="false">` : ""}
+          <span class="badge">${esc(topicLabel(article.topic))}</span>
           ${isNew ? `<span class="badge new">${esc(T.newArticle)}</span>` : ""}
         </div>
         <div class="slide-body">
@@ -124,12 +181,13 @@
             <span class="journal">${esc(src.journal || src.journalAbbrev || "PubMed")}</span>
             ${src.pubDate ? `<span>${esc(T.published)} ${esc(formatDate(src.pubDate))}</span>` : ""}
             <span>${esc(T.generated)} ${esc(formatDate(article.createdAt))} ${esc(timeFmt.format(new Date(article.createdAt)))}</span>
+            ${originalNote(article)}
           </div>
-          <h2>${esc(article.title)}</h2>
-          <p class="dek">${esc(article.dek)}</p>
-          <p class="summary">${esc(article.summary)}</p>
-          ${article.keyPoints && article.keyPoints.length ? `<ul class="keypoints">${article.keyPoints.slice(0, 3).map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
-          <div class="tags">${(article.tags || []).slice(0, 6).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          <h2>${esc(c.title)}</h2>
+          <p class="dek">${esc(c.dek)}</p>
+          <p class="summary">${esc(c.summary)}</p>
+          ${c.keyPoints && c.keyPoints.length ? `<ul class="keypoints">${c.keyPoints.slice(0, 3).map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
+          <div class="tags">${(c.tags || []).slice(0, 6).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
           <div class="actions">
             <button class="btn" type="button" data-read="${esc(article.id)}">${esc(T.read)}</button>
             ${sourceUrl ? `<a class="link" href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(T.source)} ↗</a>` : ""}
@@ -171,7 +229,7 @@
     els.carousel.style.visibility = list.length ? "visible" : "hidden";
     els.track.innerHTML = list.map((a, i) => slideHtml(a, i, list.length)).join("");
     applyHues(els.track);
-    els.dots.innerHTML = list.map((a, i) => `<li><button type="button" data-goto="${i}" aria-label="${esc(T.articleN(i + 1))}: ${esc(a.title)}"></button></li>`).join("");
+    els.dots.innerHTML = list.map((a, i) => `<li><button type="button" data-goto="${i}" aria-label="${esc(T.articleN(i + 1))}: ${esc(contentOf(a).title)}"></button></li>`).join("");
     if (keepId) {
       const idx = list.findIndex((a) => a.id === keepId);
       state.index = idx >= 0 ? idx : 0;
@@ -184,7 +242,8 @@
   function position({ animate = true } = {}) {
     const list = visible();
     els.track.classList.toggle("no-anim", !animate);
-    els.track.style.transform = `translateX(-${state.index * 100}%)`;
+    // En écriture de droite à gauche, les diapositives s'enchaînent vers la gauche : la translation s'inverse.
+    els.track.style.transform = `translateX(${isRtl() ? "" : "-"}${state.index * 100}%)`;
     if (!animate) void els.track.offsetWidth; // force le reflow pour que la prochaine transition s'anime
     els.viewport.scrollLeft = 0; // un défilement de focus ne doit jamais s'ajouter à la translation
     [...els.track.children].forEach((slide, i) => {
@@ -236,18 +295,20 @@
   function openReader(article) {
     if (els.reader.open) return;
     const src = article.source || {};
+    const c = contentOf(article);
     const authors = (src.authors || []).slice(0, 10).join(", ") + ((src.authors || []).length > 10 ? " et al." : "");
     const sourceUrl = safeHttpUrl(src.url);
     const doiUrl = safeHttpUrl(src.doiUrl || (src.doi ? `https://doi.org/${src.doi}` : ""));
     els.readerContent.innerHTML = `
-      <span class="badge badge-inline" data-hue="${hueOf(article)}">${esc(article.topic ? article.topic.label : "")}</span>
-      <h2 id="reader-title">${esc(article.title)}</h2>
-      <p class="dek">${esc(article.dek)}</p>
-      ${article.image ? `<img src="${esc(article.image.url)}" alt="${esc(article.image.alt || "")}" width="1200" height="675">` : ""}
-      <p><strong>${esc(article.summary)}</strong></p>
-      ${(article.sections || []).map((s) => `<h3>${esc(s.heading)}</h3><p>${esc(s.content)}</p>`).join("")}
-      ${article.keyPoints && article.keyPoints.length ? `<h3>${esc(T.keyPoints)}</h3><ul>${article.keyPoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
-      <div class="tags">${(article.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <span class="badge badge-inline" data-hue="${hueOf(article)}">${esc(topicLabel(article.topic))}</span>
+      <h2 id="reader-title">${esc(c.title)}</h2>
+      <p class="dek">${esc(c.dek)}</p>
+      ${originalNote(article) ? `<p class="meta">${originalNote(article)}</p>` : ""}
+      ${article.image ? `<img src="${esc(article.image.url)}" alt="${esc(altOf(article))}" width="1200" height="675">` : ""}
+      <p><strong>${esc(c.summary)}</strong></p>
+      ${(c.sections || []).map((s) => `<h3>${esc(s.heading)}</h3><p>${esc(s.content)}</p>`).join("")}
+      ${c.keyPoints && c.keyPoints.length ? `<h3>${esc(T.keyPoints)}</h3><ul>${c.keyPoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
+      <div class="tags">${(c.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
       <div class="source">
         <div><strong>${esc(src.title || "")}</strong></div>
         ${authors ? `<div>${esc(T.authors)} : ${esc(authors)}</div>` : ""}
@@ -269,7 +330,7 @@
   function renderFilters() {
     const all = `<button type="button" data-topic="" aria-pressed="${state.filter ? "false" : "true"}">${esc(T.all)}</button>`;
     els.filters.innerHTML = all + state.topics.map((t) =>
-      `<button type="button" data-topic="${esc(t.id)}" aria-pressed="${state.filter === t.id ? "true" : "false"}" data-hue="${Number(t.hue) || 190}">${esc(t.label)}</button>`).join("");
+      `<button type="button" data-topic="${esc(t.id)}" aria-pressed="${state.filter === t.id ? "true" : "false"}" data-hue="${Number(t.hue) || 190}">${esc(topicLabel(t))}</button>`).join("");
     applyHues(els.filters);
   }
   els.filters.addEventListener("click", (e) => {
@@ -297,8 +358,10 @@
   });
   document.addEventListener("keydown", (e) => {
     if (els.reader.open) return;
-    if (e.key === "ArrowRight") next();
-    else if (e.key === "ArrowLeft") prev();
+    const forward = isRtl() ? "ArrowLeft" : "ArrowRight";
+    const backward = isRtl() ? "ArrowRight" : "ArrowLeft";
+    if (e.key === forward) next();
+    else if (e.key === backward) prev();
     else if (e.key === " " && e.target === document.body) { e.preventDefault(); setPlaying(!state.playing); }
   });
   els.carousel.addEventListener("mouseenter", () => { state.paused = true; });
@@ -318,7 +381,7 @@
     const dx = e.clientX - pointerStart.x;
     const dy = e.clientY - pointerStart.y;
     pointerStart = null;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) (dx < 0 ? next : prev)();
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) ((dx < 0) !== isRtl() ? next : prev)();
   });
 
   /* ---------- Données et flux temps réel ---------- */
@@ -362,7 +425,7 @@
     try {
       const { articles } = await fetchJson("/api/articles?limit=60");
       const fresh = insertArticles(articles);
-      if (fresh.length) showToast(`${T.newArticle} : ${fresh[0].title}`, () => { state.filter = null; renderFilters(); render(); goTo(0); });
+      if (fresh.length) showToast(`${T.newArticle} : ${contentOf(fresh[0]).title}`, () => { state.filter = null; renderFilters(); render(); goTo(0); });
     } catch (err) {
       console.warn("resynchronisation impossible", err);
     }
@@ -384,7 +447,7 @@
       try {
         const article = JSON.parse(e.data);
         const fresh = insertArticles([article]);
-        if (fresh.length) showToast(`${T.newArticle} : ${article.title}`, () => { state.filter = null; renderFilters(); render(); goTo(0); });
+        if (fresh.length) showToast(`${T.newArticle} : ${contentOf(article).title}`, () => { state.filter = null; renderFilters(); render(); goTo(0); });
         refreshStatus();
       } catch (err) {
         console.error("événement article invalide", err);
@@ -424,7 +487,12 @@
 
   async function init() {
     await refreshStatus();
-    if (state.status && state.status.language) setLang(state.status.language);
+    let remembered = null;
+    try { remembered = localStorage.getItem("carrousel-lang"); } catch { /* stockage indisponible */ }
+    const available = (state.status && state.status.languages) || [];
+    if (remembered && available.includes(remembered)) setLang(remembered);
+    else if (state.status && state.status.language) setLang(state.status.language);
+    else renderLangSwitch();
     try {
       await loadAll();
     } catch (err) {

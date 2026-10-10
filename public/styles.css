@@ -38,8 +38,17 @@ body {
 @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(0.75); opacity: 0.6; } }
 .topbar h1 { font-size: 1.25rem; margin: 0; letter-spacing: 0.2px; }
 .brand-sub { margin: 2px 0 0; color: var(--muted); font-size: 0.85rem; }
+.topbar-right { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .status { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .status .sep { margin: 0 8px; }
+.lang-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; background: rgba(255, 255, 255, 0.04); }
+.lang-switch button {
+  background: transparent; color: var(--muted); border: none; border-radius: 999px; padding: 5px 12px;
+  font-size: 0.8rem; font-weight: 700; letter-spacing: 0.4px; cursor: pointer; min-width: 40px;
+}
+.lang-switch button:hover { color: var(--text); }
+.lang-switch button[aria-pressed="true"] { background: var(--accent); color: #0b1020; }
+.meta .original { font-style: italic; }
 
 .filters { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 28px 14px; }
 .filters button {
@@ -172,4 +181,20 @@ dialog#reader::backdrop { background: rgba(3, 6, 16, 0.75); backdrop-filter: blu
   .track { transition: none; }
   .brand-dot { animation: none; }
   .progress span { transition: none; }
+}
+
+/* ---------- Écriture de droite à gauche (arabe) ---------- */
+[dir="rtl"] body { font-family: "Noto Sans Arabic", "Noto Naskh Arabic", "Segoe UI", Tahoma, Arial, sans-serif; line-height: 1.7; }
+[dir="rtl"] .slide h2, [dir="rtl"] .reader-body h2 { line-height: 1.5; }
+[dir="rtl"] .badge { left: auto; right: 16px; }
+[dir="rtl"] .badge.new { right: auto; left: 16px; }
+[dir="rtl"] .nav.prev { left: auto; right: -10px; }
+[dir="rtl"] .nav.next { right: auto; left: -10px; }
+[dir="rtl"] .keypoints { padding-left: 0; padding-right: 18px; }
+[dir="rtl"] .reader-body .close { right: auto; left: 14px; }
+[dir="rtl"] .reader-body h2 { padding-right: 0; padding-left: 36px; }
+[dir="rtl"] .reader-body ul { padding-left: 0; padding-right: 18px; }
+@media (max-width: 860px) {
+  [dir="rtl"] .nav.prev { right: 4px; left: auto; }
+  [dir="rtl"] .nav.next { left: 4px; right: auto; }
 }

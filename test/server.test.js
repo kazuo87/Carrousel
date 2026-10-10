@@ -62,11 +62,14 @@ test("serveur : page, API, images et sécurité", async () => {
 
     const topics = await (await fetch(`${app.base}/api/topics`)).json();
     assert.ok(topics.length >= 4 && topics[0].label);
+    assert.deepEqual(Object.keys(topics[0].labels), ["fr", "en", "ar"]);
 
     const status = await (await fetch(`${app.base}/api/status`)).json();
     assert.equal(status.articleCount, 1);
     assert.equal(status.intervalMinutes, 6);
     assert.equal(status.scheduler.running, false);
+    assert.deepEqual(status.languages, ["fr", "en", "ar"]);
+    assert.equal(status.language, "fr");
     assert.equal(status.generators.article, "extractive (ANTHROPIC_API_KEY absente)");
     assert.equal(status.state.lastError.message, "Fichier … illisible : EACCES", "chemins absolus masqués");
 
@@ -185,6 +188,6 @@ test("publicErrorMessage : masque les chemins et tronque", () => {
 
 test("publicArticle : masque le fichier local", () => {
   const a = publicArticle(sample(1));
-  assert.deepEqual(a.image, { url: "/images/pmid-1.svg", alt: "alt", provider: "svg" });
+  assert.deepEqual(a.image, { url: "/images/pmid-1.svg", alt: "alt", alts: null, provider: "svg" });
   assert.equal(publicArticle({ ...sample(1), image: null }).image, null);
 });

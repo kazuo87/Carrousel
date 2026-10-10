@@ -2,9 +2,9 @@
 
 Bot qui génère **toutes les 6 minutes** un nouvel article de vulgarisation scientifique à partir des
 dernières publications **PubMed / NCBI**, avec une **illustration scientifique générée**, et l'affiche
-dans un **carrousel** web. Sujets couverts : pharmaceutique, peptides thérapeutiques, nouveaux
-médicaments, biosimilaires, biologiques & anticorps, essais cliniques, thérapie génique & ARN,
-anti-infectieux.
+dans un **carrousel** web **trilingue (français, anglais, arabe)**. Sujets couverts : pharmaceutique,
+peptides thérapeutiques, nouveaux médicaments, biosimilaires, biologiques & anticorps, essais
+cliniques, thérapie génique & ARN, anti-infectieux.
 
 ```
 PubMed (E-utilities) ──▶ filtre nouveauté + pertinence ──▶ rédaction (Claude) ──▶ illustration ──▶ carrousel
@@ -26,8 +26,10 @@ créneau manqué est sauté, pas rattrapé). Le carrousel se met à jour en dire
 recharger la page.
 
 Sans `ANTHROPIC_API_KEY`, le bot fonctionne quand même : les articles sont construits par un
-générateur **extractif** (sections et points clés tirés du résumé PubMed, en anglais). Avec la clé,
-les articles sont rédigés en français (ou en anglais, `ARTICLE_LANGUAGE=en`) par Claude.
+générateur **extractif** (sections et points clés tirés du résumé PubMed ; le corps reste en anglais,
+seuls les intitulés sont traduits). Avec la clé, Claude rédige chaque article dans toutes les langues
+de `LANGUAGES` (par défaut `fr,en,ar`) en un seul appel, et le carrousel bascule instantanément de
+l'une à l'autre.
 
 ### Docker
 
@@ -65,9 +67,13 @@ Le client respecte l'étiquette NCBI : paramètres `tool` et `email`, clé API o
 
 ### 3. Rédaction (`src/generate/article.js`)
 
-Claude (`claude-opus-5-5` par défaut, SDK Anthropic) reçoit la notice complète et renvoie un article
-**structuré** (titre, sous-titre, chapô, sections, points clés, tags, prompt d'illustration, texte
-alternatif) validé par un schéma Zod. Consignes : fidélité stricte au résumé, aucune donnée inventée,
+Claude (`claude-opus-5-5` par défaut, SDK Anthropic) reçoit la notice complète et renvoie, **en un seul
+appel**, une version de l'article par langue demandée (`LANGUAGES`, par défaut français, anglais et
+arabe standard moderne), chacune **structurée** (titre, sous-titre, chapô, sections, points clés, tags,
+texte alternatif) plus un prompt d'illustration commun, le tout validé par un schéma Zod. Les trois
+versions sont rédigées ensemble pour transmettre exactement les mêmes faits et réserves ; en arabe, les
+dénominations de médicaments et les sigles restent en caractères latins. Consignes : fidélité stricte
+au résumé, aucune donnée inventée,
 distinction préclinique/clinique, limites explicites, pas de conseil médical. Le repli serveur sur
 refus de politique est activé (`CLAUDE_FALLBACKS=default`). En cas de refus, de troncature, de réponse
 hors schéma ou d'erreur réseau/limite de débit, le tour bascule sur le générateur extractif ; des
@@ -89,14 +95,16 @@ Carrousel accessible (clavier, balayage tactile, lecture/pause, points de naviga
 progression, filtres par sujet, diapositives masquées inertes, respect de `prefers-reduced-motion`),
 fiche article complète avec sources (PMID, DOI, revue, auteurs), compte à rebours jusqu'au prochain
 article, insertion en direct des nouveaux articles (flux SSE, avec rattrapage après une coupure) et
-interface en français ou en anglais selon `ARTICLE_LANGUAGE`.
+**sélecteur de langue FR / EN / AR** dans l'en-tête : menu, sujets, dates et articles basculent
+instantanément, avec affichage de droite à gauche pour l'arabe (le choix est mémorisé dans le
+navigateur ; la langue par défaut est `ARTICLE_LANGUAGE`).
 
 ## API
 
 | Méthode | Route | Description |
 |---|---|---|
 | GET | `/` | Le carrousel |
-| GET | `/api/articles?limit=30&offset=0&topic=` | Articles, du plus récent au plus ancien |
+| GET | `/api/articles?limit=30&offset=0&topic=` | Articles, du plus récent au plus ancien (`content.fr`, `content.en`, `content.ar` ; champs de premier niveau dans la langue principale) |
 | GET | `/api/articles/:id` | Un article |
 | GET | `/api/topics` | Sujets configurés |
 | GET | `/api/status` | État du planificateur, prochain tour, générateurs utilisés |
@@ -129,7 +137,8 @@ Toutes les options sont documentées dans [`.env.example`](.env.example). Les pl
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `INTERVAL_MINUTES` | `6` | Cadence de génération |
-| `ARTICLE_LANGUAGE` | `fr` | Langue des articles (`fr` / `en`) |
+| `LANGUAGES` | `fr,en,ar` | Langues produites et proposées (`fr`, `en`, `ar`) |
+| `ARTICLE_LANGUAGE` | première de `LANGUAGES` | Langue principale (interface par défaut, champs de premier niveau de l'API) |
 | `TOPICS` | tous | Sous-ensemble et ordre de rotation des sujets |
 | `ANTHROPIC_API_KEY` | — | Rédaction par Claude (sinon extractif) |
 | `CLAUDE_MODEL` / `CLAUDE_EFFORT` | `claude-opus-5-5` / `medium` | Modèle et effort de raisonnement |
@@ -140,11 +149,12 @@ Toutes les options sont documentées dans [`.env.example`](.env.example). Les pl
 
 ### Coût indicatif
 
-À 6 minutes d'intervalle, le bot rédige 240 articles par jour. Avec `claude-opus-5-5`, environ
-2 000 jetons d'entrée par article et 1 500 à 3 000 jetons de sortie (article et raisonnement adaptatif
-compris, selon `CLAUDE_EFFORT`), comptez de l'ordre de 10 à 20 $ par jour ;
-`CLAUDE_MODEL=claude-sonnet-5-5` divise ce coût par deux. Le prompt système est trop court pour
-bénéficier du cache de prompts. Le générateur extractif et les illustrations SVG sont gratuits.
+À 6 minutes d'intervalle, le bot rédige 240 articles par jour. Avec `claude-opus-5-5` et les trois
+langues, environ 2 000 jetons d'entrée par article et 4 000 à 6 000 jetons de sortie (trois versions
+et raisonnement adaptatif compris, selon `CLAUDE_EFFORT`), comptez de l'ordre de 25 à 35 $ par jour ;
+`LANGUAGES=fr` ramène la sortie à un tiers et `CLAUDE_MODEL=claude-sonnet-5-5` divise le coût par deux.
+Le prompt système est trop court pour bénéficier du cache de prompts. Le générateur extractif et les
+illustrations SVG sont gratuits.
 
 ## Structure
 

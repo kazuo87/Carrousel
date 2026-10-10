@@ -7,7 +7,7 @@
 export const TOPICS = [
   {
     id: "pharmaceutique",
-    label: { fr: "Pharmaceutique", en: "Pharmaceutical science" },
+    label: { fr: "Pharmaceutique", en: "Pharmaceutical science", ar: "العلوم الصيدلانية" },
     query:
       '("pharmacokinetics"[tiab] OR "pharmacodynamics"[tiab] OR "drug delivery"[tiab] OR "drug formulation"[tiab] OR "nanoparticle"[tiab] OR "bioavailability"[tiab] OR "Pharmaceutical Preparations"[MeSH] OR "Drug Delivery Systems"[MeSH])',
     keywords: [
@@ -19,7 +19,7 @@ export const TOPICS = [
   },
   {
     id: "peptides",
-    label: { fr: "Peptides thérapeutiques", en: "Therapeutic peptides" },
+    label: { fr: "Peptides thérapeutiques", en: "Therapeutic peptides", ar: "الببتيدات العلاجية" },
     query:
       '("peptide"[tiab] OR "peptides"[tiab] OR "cyclic peptide"[tiab] OR "GLP-1"[tiab] OR "semaglutide"[tiab] OR "tirzepatide"[tiab] OR "peptide therapeutics"[tiab] OR "Peptides"[MeSH])',
     keywords: [
@@ -31,7 +31,7 @@ export const TOPICS = [
   },
   {
     id: "nouveaux-medicaments",
-    label: { fr: "Nouveaux médicaments", en: "New drugs" },
+    label: { fr: "Nouveaux médicaments", en: "New drugs", ar: "الأدوية الجديدة" },
     query:
       '("new drug"[tiab] OR "novel drug"[tiab] OR "first-in-class"[tiab] OR "drug approval"[tiab] OR "FDA approval"[tiab] OR "EMA approval"[tiab] OR "drug candidate"[tiab] OR "phase 3"[tiab] OR "phase III"[tiab] OR "Drug Approval"[MeSH])',
     keywords: [
@@ -43,7 +43,7 @@ export const TOPICS = [
   },
   {
     id: "biosimilaires",
-    label: { fr: "Biosimilaires", en: "Biosimilars" },
+    label: { fr: "Biosimilaires", en: "Biosimilars", ar: "الأدوية الحيوية المماثلة" },
     query: '("biosimilar"[tiab] OR "biosimilars"[tiab] OR "Biosimilar Pharmaceuticals"[MeSH])',
     keywords: [
       "biosimilar", "interchangeab", "reference product", "originator", "switching", "immunogenicity",
@@ -54,7 +54,7 @@ export const TOPICS = [
   },
   {
     id: "biologiques",
-    label: { fr: "Biologiques & anticorps", en: "Biologics & antibodies" },
+    label: { fr: "Biologiques & anticorps", en: "Biologics & antibodies", ar: "الأدوية البيولوجية والأجسام المضادة" },
     query:
       '("monoclonal antibody"[tiab] OR "monoclonal antibodies"[tiab] OR "antibody-drug conjugate"[tiab] OR "bispecific"[tiab] OR "Antibodies, Monoclonal"[MeSH] OR "Immunoconjugates"[MeSH])',
     keywords: [
@@ -66,7 +66,7 @@ export const TOPICS = [
   },
   {
     id: "essais-cliniques",
-    label: { fr: "Essais cliniques", en: "Clinical trials" },
+    label: { fr: "Essais cliniques", en: "Clinical trials", ar: "التجارب السريرية" },
     // Les champs [pt]/[sh]/[MeSH] sont attribués par la NLM après indexation : une branche texte
     // permet de repérer les essais fraîchement entrés dans PubMed.
     query:
@@ -80,7 +80,7 @@ export const TOPICS = [
   },
   {
     id: "therapie-genique-arn",
-    label: { fr: "Thérapie génique & ARN", en: "Gene & RNA therapeutics" },
+    label: { fr: "Thérapie génique & ARN", en: "Gene & RNA therapeutics", ar: "العلاج الجيني وعلاجات الحمض النووي الريبي" },
     query:
       '("gene therapy"[tiab] OR "mRNA vaccine"[tiab] OR "siRNA"[tiab] OR "antisense oligonucleotide"[tiab] OR "CRISPR"[tiab] OR "AAV"[tiab] OR "Genetic Therapy"[MeSH] OR "Oligonucleotides, Antisense"[MeSH])',
     keywords: [
@@ -92,7 +92,7 @@ export const TOPICS = [
   },
   {
     id: "antimicrobiens",
-    label: { fr: "Anti-infectieux & résistances", en: "Antimicrobials & resistance" },
+    label: { fr: "Anti-infectieux & résistances", en: "Antimicrobials & resistance", ar: "مضادات العدوى والمقاومة الميكروبية" },
     query:
       '("new antibiotic"[tiab] OR "novel antibiotic"[tiab] OR "antimicrobial resistance"[tiab] OR "antifungal"[tiab] OR "antiviral"[tiab] OR "Anti-Bacterial Agents"[MeSH] OR "Drug Resistance, Microbial"[MeSH])',
     keywords: [

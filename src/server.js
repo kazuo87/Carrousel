@@ -173,7 +173,7 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
           return sendJson(
             res,
             200,
-            topics.map((t) => ({ id: t.id, label: t.label[config.articleLanguage] ?? t.id, theme: t.theme, hue: t.hue })),
+            topics.map((t) => ({ id: t.id, label: t.label[config.articleLanguage] ?? t.id, labels: t.label, theme: t.theme, hue: t.hue })),
           );
         }
         if (pathname === "/api/status") {
@@ -181,6 +181,7 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
             now: new Date().toISOString(),
             intervalMinutes: config.intervalMinutes,
             language: config.articleLanguage,
+            languages: config.languages,
             articleCount: store.articles.length,
             seenCount: store.seen.pmids.size,
             scheduler: scheduler ? scheduler.status() : null,
@@ -272,5 +273,5 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
 /** Représentation publique d'un article (sans chemin de fichier local). */
 export function publicArticle(article) {
   const { image, ...rest } = article;
-  return { ...rest, image: image ? { url: image.url, alt: image.alt, provider: image.provider } : null };
+  return { ...rest, image: image ? { url: image.url, alt: image.alt, alts: image.alts ?? null, provider: image.provider } : null };
 }

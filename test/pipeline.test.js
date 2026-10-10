@@ -13,7 +13,7 @@ import { buildConfig } from "../src/config.js";
 import { startMockEutils } from "./mock-eutils-server.js";
 import { tmpDir } from "./helpers.js";
 
-const extractiveGenerator = { usesClaude: false, generate: async (r, t) => generateExtractiveArticle(r, t, { language: "fr" }) };
+const extractiveGenerator = { usesClaude: false, generate: async (r, t) => generateExtractiveArticle(r, t, { languages: ["fr", "en", "ar"] }) };
 
 async function setup({ topics = ["biosimilaires", "peptides", "nouveaux-medicaments"], failures, generator = extractiveGenerator } = {}) {
   const { dir, images, cleanup } = await tmpDir();
@@ -39,6 +39,14 @@ test("Pipeline.runOnce : crée un article nouveau et pertinent, puis tourne sur 
     assert.equal(a.image.url, "/images/pmid-40000001.svg");
     assert.equal(a.image.provider, "svg");
     assert.equal(a.language, "fr");
+    assert.deepEqual(a.languages, ["fr", "en", "ar"]);
+    assert.equal(a.bodyLanguage, "en");
+    assert.equal(a.title, a.content.fr.title, "champs de premier niveau = version principale");
+    assert.equal(a.content.ar.sections[0].heading, "السياق");
+    assert.equal(a.content.fr.imageAlt, undefined, "le texte alternatif est porté par l'image");
+    assert.match(a.image.alts.ar, /^رسم توضيحي/);
+    assert.equal(a.image.alt, a.image.alts.fr);
+    assert.equal(a.topic.labels.ar, "الأدوية الحيوية المماثلة");
     assert.ok(a.relevance.score > 4);
     assert.ok(a.sections.length >= 3 && a.keyPoints.length >= 2);
     assert.equal(ctx.store.state.topicCursor, 1);

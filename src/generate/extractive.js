@@ -1,11 +1,11 @@
 /**
  * Générateur « extractif » : construit un article lisible uniquement à partir des métadonnées
  * et du résumé PubMed, sans modèle de langage. Utilisé comme solution de repli lorsque Claude
- * n'est pas configuré ou indisponible. Le texte reste donc en anglais (langue du résumé),
- * avec des intitulés de sections dans la langue choisie.
+ * n'est pas configuré ou indisponible. Le corps du texte reste en anglais (langue du résumé) ;
+ * seuls les intitulés et mentions sont traduits dans chaque langue demandée.
  */
 
-const LABELS = {
+export const LABELS = {
   fr: {
     context: "Contexte",
     methods: "Méthodes",
@@ -17,6 +17,7 @@ const LABELS = {
     readMore: "Résumé original (anglais) publié dans",
     dekPrefix: "Étude publiée dans",
     disclaimer: "Article généré automatiquement à partir du résumé PubMed ; il ne constitue pas un avis médical.",
+    imageAlt: "Illustration",
   },
   en: {
     context: "Background",
@@ -29,6 +30,20 @@ const LABELS = {
     readMore: "Original abstract published in",
     dekPrefix: "Study published in",
     disclaimer: "Automatically generated from the PubMed abstract; this is not medical advice.",
+    imageAlt: "Illustration",
+  },
+  ar: {
+    context: "السياق",
+    methods: "المنهجية",
+    results: "النتائج",
+    conclusions: "الخلاصة",
+    findings: "ما تُظهره الدراسة",
+    keyPoints: "النقاط الرئيسية",
+    source: "المصدر",
+    readMore: "الملخص الأصلي (بالإنجليزية) منشور في",
+    dekPrefix: "دراسة منشورة في",
+    disclaimer: "مقال مُولَّد آليًا من ملخص PubMed؛ لا يُعدّ نصيحة طبية.",
+    imageAlt: "رسم توضيحي",
   },
 };
 
@@ -64,12 +79,8 @@ function pickKeyPoints(sentences, max = 4) {
     .map(({ s }) => s);
 }
 
-/**
- * @param {object} record  Notice PubMed (voir pubmed.js)
- * @param {object} topic   Sujet (voir topics.js)
- * @param {{language?: "fr"|"en"}} options
- */
-export function generateExtractiveArticle(record, topic, { language = "fr" } = {}) {
+/** Version d'un article (titre, chapô, sections, points clés…) dans une langue donnée. */
+function buildContent(record, topic, language) {
   const L = LABELS[language] ?? LABELS.fr;
   const sections = [];
   const structured = record.abstractSections.filter((s) => s.label);
@@ -114,8 +125,23 @@ export function generateExtractiveArticle(record, topic, { language = "fr" } = {
     sections,
     keyPoints,
     tags: tags.length ? tags : [topic.label[language] ?? topic.id],
+    imageAlt: `${L.imageAlt} — ${topic.label[language] ?? topic.id}`,
+  };
+}
+
+/**
+ * @param {object} record  Notice PubMed (voir pubmed.js)
+ * @param {object} topic   Sujet (voir topics.js)
+ * @param {{languages?: string[]}} options  Langues à produire (fr, en, ar)
+ * @returns {{content: Record<string, object>, imagePrompt: string, generator: string, bodyLanguage: string}}
+ */
+export function generateExtractiveArticle(record, topic, { languages = ["fr"] } = {}) {
+  const content = Object.fromEntries(languages.map((lang) => [lang, buildContent(record, topic, lang)]));
+  return {
+    content,
     imagePrompt: `Scientific illustration about ${topic.label.en.toLowerCase()}: ${record.title}`,
-    imageAlt: `Illustration — ${topic.label[language] ?? topic.id}`,
     generator: "extractive",
+    // Le corps du texte est celui du résumé PubMed, en anglais.
+    bodyLanguage: "en",
   };
 }

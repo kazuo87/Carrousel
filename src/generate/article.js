@@ -1,7 +1,9 @@
 /**
- * Génération de l'article avec Claude (SDK Anthropic, sortie structurée JSON validée par Zod).
- * En cas d'absence de clé, d'erreur d'authentification, de refus ou d'erreur réseau, on bascule
- * sur le générateur extractif pour que le carrousel continue de se remplir.
+ * Génération de l'article avec Claude (SDK Anthropic, sortie structurée JSON validée par Zod),
+ * dans toutes les langues demandées (français, anglais, arabe) en un seul appel pour que les
+ * versions soient fidèles entre elles. En cas d'absence d'identifiants, d'erreur d'authentification,
+ * de refus ou d'erreur réseau, on bascule sur le générateur extractif pour que le carrousel continue
+ * de se remplir.
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
@@ -11,72 +13,79 @@ import { generateExtractiveArticle } from "./extractive.js";
 
 const log = createLogger("article");
 
-export const ArticleSchema = z.object({
-  title: z.string().min(10).max(160).describe("Titre journalistique, accrocheur mais fidèle à l'étude"),
-  dek: z.string().min(20).max(260).describe("Sous-titre d'une phrase qui précise l'enjeu"),
-  summary: z.string().min(80).max(700).describe("Chapô : 2 à 3 phrases résumant l'essentiel"),
+const LANGUAGE_NAMES = {
+  fr: "French (fr)",
+  en: "English (en)",
+  ar: "Modern Standard Arabic (ar)",
+};
+
+/** Contenu d'un article dans une langue. */
+export const ContentSchema = z.object({
+  title: z.string().min(10).max(180).describe("Journalistic headline, catchy but faithful to the study"),
+  dek: z.string().min(20).max(280).describe("One-sentence subheading stating what is at stake"),
+  summary: z.string().min(80).max(800).describe("Lead paragraph: 2 to 3 sentences with the essentials"),
   sections: z
     .array(
       z.object({
-        heading: z.string().min(3).max(90),
-        content: z.string().min(80).max(2200),
+        heading: z.string().min(3).max(100),
+        content: z.string().min(80).max(2400),
       }),
     )
     .min(3)
     .max(6)
-    .describe("Corps de l'article : contexte, résultats, portée, limites…"),
-  keyPoints: z.array(z.string().min(10).max(220)).min(3).max(6).describe("Points clés factuels"),
+    .describe("Body of the article: context, what was done, results, why it matters, limitations…"),
+  keyPoints: z.array(z.string().min(10).max(240)).min(3).max(6).describe("Factual key points, one sentence each"),
   tags: z.array(z.string().min(2).max(40)).min(2).max(8),
-  imagePrompt: z
-    .string()
-    .min(20)
-    .max(600)
-    .describe("Prompt en anglais pour une illustration scientifique (pas de texte, pas de personne identifiable)"),
-  imageAlt: z.string().min(10).max(200).describe("Texte alternatif de l'illustration"),
+  imageAlt: z.string().min(10).max(220).describe("Alternative text of the illustration, in this language"),
 });
 
-const SYSTEM_PROMPTS = {
-  fr: `Tu es journaliste scientifique spécialisé en pharmacie, pharmacologie et biotechnologies, écrivant pour un public de professionnels de santé, de chercheurs et d'étudiants francophones.
+/** Schéma complet : une version par langue + prompt d'illustration commun (en anglais). */
+export function buildArticleSchema(languages) {
+  return z.object({
+    content: z.object(Object.fromEntries(languages.map((lang) => [lang, ContentSchema]))),
+    imagePrompt: z
+      .string()
+      .min(20)
+      .max(600)
+      .describe("English prompt for an abstract or schematic scientific illustration (no text, no identifiable person)"),
+  });
+}
 
-À partir de la notice PubMed fournie (titre, résumé, métadonnées), rédige un article de vulgarisation de haut niveau en français (environ 400 à 650 mots au total).
+/** Alias conservé pour les tests et les intégrations : schéma à trois langues. */
+export const ArticleSchema = buildArticleSchema(["fr", "en", "ar"]);
 
-Règles impératives :
-- Reste strictement fidèle au résumé : n'invente aucun chiffre, aucune donnée, aucune conclusion, aucun auteur. Si une information manque, dis-le ou n'en parle pas.
-- Explique le contexte (pourquoi cette étude), ce qui a été fait, ce qui a été trouvé, pourquoi c'est important pour la pratique ou la recherche, et les limites (taille d'échantillon, étude préclinique, résumé seul, etc.).
-- Distingue clairement résultats précliniques (in vitro, animal) et résultats cliniques (humains).
-- Utilise les dénominations communes internationales des médicaments.
-- Ton précis, clair, sans sensationnalisme ni conseil médical individuel.
-- Les points clés sont des faits issus du résumé, chacun en une phrase.
-- Le champ imagePrompt est un prompt en anglais pour générer une illustration scientifique abstraite ou schématique liée au sujet (molécule, peptide, anticorps, cellules, laboratoire…), sans texte dans l'image et sans personne identifiable.
-- Le champ imageAlt est en français.`,
-  en: `You are a science journalist specialising in pharmacy, pharmacology and biotechnology, writing for healthcare professionals, researchers and students.
+export function buildSystemPrompt(languages) {
+  const names = languages.map((l) => LANGUAGE_NAMES[l] ?? l).join(", ");
+  return `You are a science journalist specialising in pharmacy, pharmacology and biotechnology, writing for healthcare professionals, researchers and students.
 
-From the PubMed record provided (title, abstract, metadata), write a high-level explanatory article in English (about 400 to 650 words in total).
+From the PubMed record provided (title, abstract, metadata), write a high-level explanatory article of about 400 to 650 words, and deliver it in each of the following languages: ${names}. Every language version must convey exactly the same facts, figures and caveats; write each version natively (no word-for-word translation artefacts).
 
 Strict rules:
 - Stay faithful to the abstract: never invent numbers, data, conclusions or authors. If information is missing, say so or leave it out.
 - Explain the context (why this study), what was done, what was found, why it matters for practice or research, and the limitations (sample size, preclinical study, abstract only, etc.).
 - Clearly distinguish preclinical (in vitro, animal) from clinical (human) results.
-- Use international non-proprietary drug names.
+- Use international non-proprietary drug names. In the Arabic version, keep drug names, gene names and acronyms in Latin script, and write in Modern Standard Arabic.
 - Precise, clear tone, no sensationalism and no individual medical advice.
 - Key points are facts taken from the abstract, one sentence each.
-- The imagePrompt field is an English prompt for an abstract or schematic scientific illustration related to the topic (molecule, peptide, antibody, cells, laboratory…), with no text in the image and no identifiable person.`,
-};
+- Section headings are written in the language of the version they belong to.
+- The imagePrompt field is a single English prompt for an abstract or schematic scientific illustration related to the topic (molecule, peptide, antibody, cells, laboratory…), with no text in the image and no identifiable person.
+- imageAlt is written in the language of its version.`;
+}
 
-function formatRecord(record, topic, language) {
+function formatRecord(record, topic, languages) {
   const lines = [
-    `Sujet du carrousel / carousel topic: ${topic.label[language] ?? topic.id} (${topic.id})`,
+    `Carousel topic: ${languages.map((l) => `${l}: ${topic.label[l] ?? topic.id}`).join(" | ")} (${topic.id})`,
     `PMID: ${record.pmid}`,
     record.doi ? `DOI: ${record.doi}` : null,
-    `Titre / Title: ${record.title}`,
-    `Revue / Journal: ${record.journal}${record.journalAbbrev ? ` (${record.journalAbbrev})` : ""}`,
-    `Date de publication: ${record.pubDate || "inconnue"}`,
-    `Auteurs: ${record.authors.slice(0, 8).join(", ")}${record.authors.length > 8 ? " et al." : ""}`,
-    `Types de publication: ${record.publicationTypes.join("; ") || "non précisé"}`,
-    record.meshTerms.length ? `Termes MeSH: ${record.meshTerms.join("; ")}` : null,
-    record.keywords.length ? `Mots-clés: ${record.keywords.join("; ")}` : null,
+    `Title: ${record.title}`,
+    `Journal: ${record.journal}${record.journalAbbrev ? ` (${record.journalAbbrev})` : ""}`,
+    `Publication date: ${record.pubDate || "unknown"}`,
+    `Authors: ${record.authors.slice(0, 8).join(", ")}${record.authors.length > 8 ? " et al." : ""}`,
+    `Publication types: ${record.publicationTypes.join("; ") || "not specified"}`,
+    record.meshTerms.length ? `MeSH terms: ${record.meshTerms.join("; ")}` : null,
+    record.keywords.length ? `Keywords: ${record.keywords.join("; ")}` : null,
     "",
-    "Résumé / Abstract:",
+    "Abstract:",
     record.abstract,
   ];
   return lines.filter((l) => l !== null).join("\n");
@@ -101,12 +110,14 @@ export class ArticleGenerator {
   /**
    * @param {object} options
    * @param {object} options.claude  Config Claude (voir config.js)
-   * @param {"fr"|"en"} options.language
+   * @param {string[]} [options.languages]  Langues à produire (fr, en, ar)
    * @param {Anthropic} [options.client]  Client injectable (tests)
    */
-  constructor({ claude, language = "fr", client } = {}) {
+  constructor({ claude, languages = ["fr"], client } = {}) {
     this.config = { ...claude };
-    this.language = language;
+    this.languages = languages;
+    this.schema = buildArticleSchema(languages);
+    this.systemPrompt = buildSystemPrompt(languages);
     this.disabledReason = null;
     if (!claude?.enabled) {
       this.disabledReason = "CLAUDE_ENABLED=false";
@@ -127,7 +138,7 @@ export class ArticleGenerator {
   }
 
   async generate(record, topic) {
-    if (!this.client) return generateExtractiveArticle(record, topic, { language: this.language });
+    if (!this.client) return generateExtractiveArticle(record, topic, { languages: this.languages });
     try {
       return await this.generateWithClaude(record, topic);
     } catch (err) {
@@ -141,7 +152,7 @@ export class ArticleGenerator {
       } else {
         log.warn(`Claude indisponible (${kind}) : ${err.message} → génération extractive`);
       }
-      return generateExtractiveArticle(record, topic, { language: this.language });
+      return generateExtractiveArticle(record, topic, { languages: this.languages });
     }
   }
 
@@ -150,11 +161,11 @@ export class ArticleGenerator {
     const params = {
       model,
       max_tokens: maxTokens,
-      // Pas de cache_control : le prompt système (~350 jetons) est en dessous du préfixe minimal
+      // Pas de cache_control : le prompt système (~400 jetons) est en dessous du préfixe minimal
       // mis en cache et la cadence de 6 minutes dépasse la durée de vie par défaut du cache.
-      system: SYSTEM_PROMPTS[this.language] ?? SYSTEM_PROMPTS.fr,
-      messages: [{ role: "user", content: formatRecord(record, topic, this.language) }],
-      output_config: { effort, format: zodOutputFormat(ArticleSchema) },
+      system: this.systemPrompt,
+      messages: [{ role: "user", content: formatRecord(record, topic, this.languages) }],
+      output_config: { effort, format: zodOutputFormat(this.schema) },
     };
     // Repli serveur sur refus de politique : la requête est rejouée sur le modèle recommandé par Anthropic.
     if (fallbacks === "default") {
@@ -199,14 +210,14 @@ export class ArticleGenerator {
     } catch {
       throw new Error("réponse JSON invalide");
     }
-    const validated = ArticleSchema.safeParse(parsed);
+    const validated = this.schema.safeParse(parsed);
     if (!validated.success) {
       throw new Error(`réponse hors schéma : ${validated.error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`);
     }
     const usage = response.usage ?? {};
     log.info(
-      `Article rédigé par ${response.model ?? model} (entrée ${usage.input_tokens ?? "?"} / cache ${usage.cache_read_input_tokens ?? 0} / sortie ${usage.output_tokens ?? "?"} jetons)`,
+      `Article rédigé en ${this.languages.join("/")} par ${response.model ?? model} (entrée ${usage.input_tokens ?? "?"} / sortie ${usage.output_tokens ?? "?"} jetons)`,
     );
-    return { ...validated.data, generator: `claude:${response.model ?? model}` };
+    return { ...validated.data, generator: `claude:${response.model ?? model}`, bodyLanguage: null };
   }
 }
