@@ -1,0 +1,23 @@
+{
+  "name": "carrousel-sci-bot",
+  "version": "1.0.0",
+  "description": "Bot qui génère toutes les 6 minutes un article scientifique (pharma, peptides, nouveaux médicaments, biosimilaires…) à partir de PubMed/NCBI et l'affiche dans un carrousel.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "once": "node src/cli.js once",
+    "serve": "node src/cli.js serve",
+    "test": "node --test \"test/**/*.test.js\"",
+    "mock:eutils": "node test/mock-eutils-server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "fast-xml-parser": "^5.11.2",
+    "zod": "^4.6.5"
+  },
+  "license": "MIT"
+}

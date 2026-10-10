@@ -1,0 +1,192 @@
+<?xml version="1.0" ?>
+<!DOCTYPE PubmedArticleSet PUBLIC "-//NLM//DTD PubMedArticle, 1st January 2025//EN" "https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_250101.dtd">
+<PubmedArticleSet>
+<PubmedArticle>
+    <MedlineCitation Status="MEDLINE" Owner="NLM" IndexingMethod="Automated">
+        <PMID Version="1">40000001</PMID>
+        <DateRevised><Year>2026</Year><Month>10</Month><Day>02</Day></DateRevised>
+        <Article PubModel="Print-Electronic">
+            <Journal>
+                <ISSN IssnType="Electronic">1234-5678</ISSN>
+                <JournalIssue CitedMedium="Internet">
+                    <Volume>88</Volume>
+                    <Issue>4</Issue>
+                    <PubDate><Year>2026</Year><Month>Oct</Month></PubDate>
+                </JournalIssue>
+                <Title>Journal of Clinical Pharmacology and Therapeutics</Title>
+                <ISOAbbreviation>J Clin Pharmacol Ther</ISOAbbreviation>
+            </Journal>
+            <ArticleTitle>Switching from reference adalimumab to biosimilar <i>ABP 501</i> in patients with rheumatoid arthritis: a randomized, double-blind equivalence trial.</ArticleTitle>
+            <Pagination><MedlinePgn>412-423</MedlinePgn></Pagination>
+            <ELocationID EIdType="doi" ValidYN="Y">10.1000/jcpt.2026.0001</ELocationID>
+            <Abstract>
+                <AbstractText Label="BACKGROUND" NlmCategory="BACKGROUND">Biosimilars of adalimumab offer the potential for substantial cost savings, but evidence on the clinical consequences of switching from the reference product remains limited in some populations. We evaluated whether a single switch from reference adalimumab to the biosimilar ABP 501 maintains efficacy and safety in patients with moderate-to-severe rheumatoid arthritis.</AbstractText>
+                <AbstractText Label="METHODS" NlmCategory="METHODS">In this multicentre, randomized, double-blind trial, 526 adults with rheumatoid arthritis who had a stable response to reference adalimumab for at least 6 months were randomized 1:1 to continue the reference product or switch to ABP 501 (40 mg every 2 weeks) for 52 weeks. The primary endpoint was the change in DAS28-CRP from baseline to week 26, with an equivalence margin of &#177;0.6.</AbstractText>
+                <AbstractText Label="RESULTS" NlmCategory="RESULTS">The least-squares mean change in DAS28-CRP at week 26 was -0.04 in the switch group and -0.02 in the continuation group (difference -0.02; 90% CI -0.15 to 0.11), within the prespecified equivalence margin. ACR20 response at week 52 was maintained in 84.1% and 83.6% of patients, respectively. Treatment-emergent adverse events occurred in 61.2% versus 60.5% of patients, and anti-drug antibodies developed in 7.9% versus 8.3%. No new safety signals were identified.</AbstractText>
+                <AbstractText Label="CONCLUSIONS" NlmCategory="CONCLUSIONS">A single switch from reference adalimumab to ABP 501 was equivalent in efficacy and comparable in safety and immunogenicity over 52 weeks, supporting the interchangeable use of this biosimilar in rheumatoid arthritis.</AbstractText>
+                <CopyrightInformation>&#169; 2026 The Authors.</CopyrightInformation>
+            </Abstract>
+            <AuthorList CompleteYN="Y">
+                <Author ValidYN="Y"><LastName>Martin</LastName><ForeName>Claire</ForeName><Initials>C</Initials><AffiliationInfo><Affiliation>Department of Rheumatology, Lyon, France.</Affiliation></AffiliationInfo></Author>
+                <Author ValidYN="Y"><LastName>Okafor</LastName><ForeName>Daniel</ForeName><Initials>D</Initials></Author>
+                <Author ValidYN="Y"><LastName>Yamada</LastName><ForeName>Hiroshi</ForeName><Initials>H</Initials></Author>
+            </AuthorList>
+            <Language>eng</Language>
+            <PublicationTypeList>
+                <PublicationType UI="D016428">Journal Article</PublicationType>
+                <PublicationType UI="D016449">Randomized Controlled Trial</PublicationType>
+                <PublicationType UI="D016448">Multicenter Study</PublicationType>
+            </PublicationTypeList>
+            <ArticleDate DateType="Electronic"><Year>2026</Year><Month>09</Month><Day>28</Day></ArticleDate>
+        </Article>
+        <MedlineJournalInfo><Country>England</Country><MedlineTA>J Clin Pharmacol Ther</MedlineTA><NlmUniqueID>0000000</NlmUniqueID></MedlineJournalInfo>
+        <KeywordList Owner="NOTNLM">
+            <Keyword MajorTopicYN="N">biosimilar</Keyword>
+            <Keyword MajorTopicYN="N">adalimumab</Keyword>
+            <Keyword MajorTopicYN="N">interchangeability</Keyword>
+        </KeywordList>
+        <MeshHeadingList>
+            <MeshHeading><DescriptorName UI="D000068879" MajorTopicYN="Y">Biosimilar Pharmaceuticals</DescriptorName><QualifierName UI="Q000627" MajorTopicYN="N">therapeutic use</QualifierName></MeshHeading>
+            <MeshHeading><DescriptorName UI="D000068879" MajorTopicYN="N">Adalimumab</DescriptorName></MeshHeading>
+            <MeshHeading><DescriptorName UI="D001172" MajorTopicYN="N">Arthritis, Rheumatoid</DescriptorName></MeshHeading>
+            <MeshHeading><DescriptorName UI="D000068879" MajorTopicYN="N">Drug Substitution</DescriptorName></MeshHeading>
+        </MeshHeadingList>
+    </MedlineCitation>
+    <PubmedData>
+        <History>
+            <PubMedPubDate PubStatus="received"><Year>2026</Year><Month>5</Month><Day>12</Day></PubMedPubDate>
+            <PubMedPubDate PubStatus="entrez"><Year>2026</Year><Month>10</Month><Day>2</Day><Hour>6</Hour><Minute>14</Minute></PubMedPubDate>
+            <PubMedPubDate PubStatus="pubmed"><Year>2026</Year><Month>10</Month><Day>3</Day><Hour>6</Hour><Minute>0</Minute></PubMedPubDate>
+        </History>
+        <PublicationStatus>ppublish</PublicationStatus>
+        <ArticleIdList>
+            <ArticleId IdType="pubmed">40000001</ArticleId>
+            <ArticleId IdType="doi">10.1000/jcpt.2026.0001</ArticleId>
+            <ArticleId IdType="pmc">PMC9900001</ArticleId>
+        </ArticleIdList>
+    </PubmedData>
+</PubmedArticle>
+<PubmedArticle>
+    <MedlineCitation Status="Publisher" Owner="NLM">
+        <PMID Version="1">40000002</PMID>
+        <Article PubModel="Print-Electronic">
+            <Journal>
+                <ISSN IssnType="Electronic">2222-3333</ISSN>
+                <JournalIssue CitedMedium="Internet">
+                    <PubDate><Year>2026</Year><Month>09</Month><Day>30</Day></PubDate>
+                </JournalIssue>
+                <Title>Peptide Science Advances</Title>
+                <ISOAbbreviation>Pept Sci Adv</ISOAbbreviation>
+            </Journal>
+            <ArticleTitle>A stapled cyclic peptide agonist of the GLP-1 receptor with extended half-life improves glycaemic control in diabetic mice</ArticleTitle>
+            <ELocationID EIdType="doi" ValidYN="Y">10.1000/psa.2026.0777</ELocationID>
+            <Abstract>
+                <AbstractText>Glucagon-like peptide-1 (GLP-1) receptor agonists are a cornerstone of type 2 diabetes and obesity treatment, but most require weekly injection and are prone to proteolytic degradation. Here we describe the design of a hydrocarbon-stapled cyclic peptide, SP-114, which binds the GLP-1 receptor with nanomolar affinity (K<sub>d</sub> = 2.1 nM) and resists degradation by neprilysin and DPP-4 in vitro. In db/db mice, a single subcutaneous dose of SP-114 reduced blood glucose for up to 7 days and lowered HbA1c by 1.4 percentage points after 4 weeks of once-weekly dosing, compared with 1.1 points for semaglutide at an equimolar dose. Pharmacokinetic analysis showed a plasma half-life of 96 hours, attributable to albumin binding conferred by a C-terminal lipid moiety. The peptide was well tolerated, with no weight loss beyond that expected from reduced food intake and no evidence of hepatic toxicity. These preclinical findings support the further development of stapled cyclic peptides as long-acting incretin therapeutics, although efficacy and safety in humans remain to be established.</AbstractText>
+            </Abstract>
+            <AuthorList CompleteYN="Y">
+                <Author ValidYN="Y"><LastName>Nguyen</LastName><ForeName>An</ForeName><Initials>A</Initials></Author>
+                <Author ValidYN="Y"><LastName>Rossi</LastName><ForeName>Elena</ForeName><Initials>E</Initials></Author>
+            </AuthorList>
+            <Language>eng</Language>
+            <PublicationTypeList>
+                <PublicationType UI="D016428">Journal Article</PublicationType>
+            </PublicationTypeList>
+            <ArticleDate DateType="Electronic"><Year>2026</Year><Month>09</Month><Day>30</Day></ArticleDate>
+        </Article>
+        <KeywordList Owner="NOTNLM">
+            <Keyword MajorTopicYN="N">GLP-1</Keyword>
+            <Keyword MajorTopicYN="N">stapled peptide</Keyword>
+            <Keyword MajorTopicYN="N">incretin</Keyword>
+        </KeywordList>
+    </MedlineCitation>
+    <PubmedData>
+        <History>
+            <PubMedPubDate PubStatus="entrez"><Year>2026</Year><Month>10</Month><Day>1</Day><Hour>18</Hour><Minute>3</Minute></PubMedPubDate>
+        </History>
+        <PublicationStatus>aheadofprint</PublicationStatus>
+        <ArticleIdList>
+            <ArticleId IdType="pubmed">40000002</ArticleId>
+            <ArticleId IdType="doi">10.1000/psa.2026.0777</ArticleId>
+        </ArticleIdList>
+    </PubmedData>
+</PubmedArticle>
+<PubmedArticle>
+    <MedlineCitation Status="MEDLINE" Owner="NLM">
+        <PMID Version="1">40000003</PMID>
+        <Article PubModel="Print">
+            <Journal>
+                <JournalIssue CitedMedium="Print"><PubDate><MedlineDate>2026 Sep-Oct</MedlineDate></PubDate></JournalIssue>
+                <Title>Biologics Today</Title>
+                <ISOAbbreviation>Biol Today</ISOAbbreviation>
+            </Journal>
+            <ArticleTitle>Erratum: Immunogenicity of biosimilar infliximab in inflammatory bowel disease.</ArticleTitle>
+            <Abstract>
+                <AbstractText>This erratum corrects a numerical error in Table 2 of the original article concerning the proportion of patients with anti-drug antibodies at week 30, which should read 12.4% rather than 21.4%. The authors regret the error, which does not change the conclusions of the study. The corrected table is reproduced below together with the revised confidence intervals for each subgroup analysis reported in the original manuscript.</AbstractText>
+            </Abstract>
+            <Language>eng</Language>
+            <PublicationTypeList>
+                <PublicationType UI="D016425">Published Erratum</PublicationType>
+            </PublicationTypeList>
+        </Article>
+    </MedlineCitation>
+    <PubmedData>
+        <History>
+            <PubMedPubDate PubStatus="entrez"><Year>2026</Year><Month>9</Month><Day>29</Day></PubMedPubDate>
+        </History>
+        <PublicationStatus>ppublish</PublicationStatus>
+        <ArticleIdList>
+            <ArticleId IdType="pubmed">40000003</ArticleId>
+        </ArticleIdList>
+    </PubmedData>
+</PubmedArticle>
+<PubmedArticle>
+    <MedlineCitation Status="In-Data-Review" Owner="NLM">
+        <PMID Version="1">40000004</PMID>
+        <Article PubModel="Electronic">
+            <Journal>
+                <JournalIssue CitedMedium="Internet"><Volume>412</Volume><PubDate><Year>2026</Year><Month>Sep</Month><Day>25</Day></PubDate></JournalIssue>
+                <Title>The New Therapeutics Journal</Title>
+                <ISOAbbreviation>New Ther J</ISOAbbreviation>
+            </Journal>
+            <ArticleTitle>Oral first-in-class KRAS G12D inhibitor zoldonrasib in previously treated pancreatic adenocarcinoma: a phase 3 randomized trial.</ArticleTitle>
+            <Abstract>
+                <AbstractText Label="Background">KRAS G12D mutations drive roughly 40% of pancreatic adenocarcinomas and have been considered undruggable. Zoldonrasib is an oral, first-in-class, non-covalent inhibitor of KRAS G12D.</AbstractText>
+                <AbstractText Label="Methods">We randomly assigned 612 patients with metastatic pancreatic adenocarcinoma harbouring KRAS G12D who had progressed on first-line chemotherapy to receive zoldonrasib (300 mg twice daily) or investigator's choice of chemotherapy. The primary endpoint was overall survival.</AbstractText>
+                <AbstractText Label="Results">Median overall survival was 11.8 months with zoldonrasib versus 7.9 months with chemotherapy (hazard ratio for death, 0.68; 95% CI, 0.56 to 0.83; P&lt;0.001). The objective response rate was 32% versus 9%. Grade 3 or higher adverse events occurred in 41% of patients receiving zoldonrasib and 58% receiving chemotherapy; diarrhoea and rash were the most common treatment-related events.</AbstractText>
+                <AbstractText Label="Conclusions">Zoldonrasib significantly prolonged overall survival compared with chemotherapy in previously treated KRAS G12D-mutated pancreatic adenocarcinoma, with a manageable safety profile. (Funded by Example Pharma; ClinicalTrials.gov number, NCT00000000.)</AbstractText>
+            </Abstract>
+            <AuthorList CompleteYN="Y">
+                <Author ValidYN="Y"><LastName>Fernández</LastName><ForeName>Lucía</ForeName><Initials>L</Initials></Author>
+                <Author ValidYN="Y"><CollectiveName>KRASCEND-3 Investigators</CollectiveName></Author>
+            </AuthorList>
+            <Language>eng</Language>
+            <PublicationTypeList>
+                <PublicationType UI="D016428">Journal Article</PublicationType>
+                <PublicationType UI="D017428">Clinical Trial, Phase III</PublicationType>
+                <PublicationType UI="D016449">Randomized Controlled Trial</PublicationType>
+            </PublicationTypeList>
+        </Article>
+        <KeywordList Owner="NOTNLM">
+            <Keyword MajorTopicYN="N">KRAS G12D</Keyword>
+            <Keyword MajorTopicYN="N">first-in-class</Keyword>
+            <Keyword MajorTopicYN="N">pancreatic cancer</Keyword>
+        </KeywordList>
+    </MedlineCitation>
+    <PubmedData>
+        <History>
+            <PubMedPubDate PubStatus="entrez"><Year>2026</Year><Month>9</Month><Day>26</Day></PubMedPubDate>
+        </History>
+        <PublicationStatus>epublish</PublicationStatus>
+        <ArticleIdList>
+            <ArticleId IdType="pubmed">40000004</ArticleId>
+            <ArticleId IdType="doi">10.1000/ntj.2026.4444</ArticleId>
+        </ArticleIdList>
+    </PubmedData>
+</PubmedArticle>
+<PubmedBookArticle>
+    <BookDocument>
+        <PMID Version="1">40000005</PMID>
+        <ArticleTitle>A book chapter that must be ignored</ArticleTitle>
+    </BookDocument>
+</PubmedBookArticle>
+</PubmedArticleSet>
