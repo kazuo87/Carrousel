@@ -151,8 +151,8 @@ dialog#reader::backdrop { background: rgba(3, 6, 16, 0.75); backdrop-filter: blu
 
 @media (max-width: 860px) {
   .topbar, .filters, main { padding-left: 16px; padding-right: 16px; }
-  .slide { grid-template-columns: 1fr; grid-template-rows: auto auto; min-height: 0; }
-  .slide-media { aspect-ratio: 16 / 9; }
+  .slide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 0; }
+  .slide-media { aspect-ratio: 16 / 9; min-width: 0; }
   .slide-media img { height: 100%; }
   .slide-body { padding: 18px; }
   .nav { width: 38px; height: 38px; font-size: 1.4rem; }
