@@ -8,6 +8,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { titleFingerprint } from "./relevance.js";
+import { TOPICS } from "./topics.js";
 import { createLogger } from "./logger.js";
 
 const log = createLogger("store");
@@ -46,6 +47,11 @@ export function migrateArticle(article) {
   if (!Array.isArray(migrated.languages)) migrated.languages = migrated.language ? [migrated.language] : [];
   // Le générateur extractif a toujours produit un corps de texte en anglais (celui du résumé PubMed).
   if (migrated.bodyLanguage === undefined) migrated.bodyLanguage = migrated.generator === "extractive" ? "en" : null;
+  // Libellés de sujet par langue : absents avant le trilingue, mais l'identifiant du sujet est stable.
+  if (migrated.topic && typeof migrated.topic === "object" && !migrated.topic.labels) {
+    const known = TOPICS.find((t) => t.id === migrated.topic.id);
+    if (known) migrated.topic = { ...migrated.topic, labels: known.label };
+  }
   return migrated;
 }
 

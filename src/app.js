@@ -29,6 +29,14 @@ export async function createApp({ withScheduler = true } = {}) {
     get article() {
       return articleGenerator.usesClaude ? `claude:${config.claude.model}` : `extractive (${articleGenerator.disabledReason})`;
     },
+    /** Vrai quand Claude est réellement utilisable (identifiants fournis ou première réponse reçue). */
+    get articleConfirmed() {
+      return articleGenerator.usesClaude && articleGenerator.confirmed;
+    },
+    /** Raison de l'absence de Claude : disabled | no-credentials | rejected | null. */
+    get articleReason() {
+      return articleGenerator.disabledCode;
+    },
     image: config.image.provider === "openai" ? `openai:${config.image.openaiModel}` : "svg",
     pubmed: config.pubmed.baseUrl,
     topics: topics.map((t) => t.id),

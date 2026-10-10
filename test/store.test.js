@@ -91,9 +91,12 @@ test("Store : l'index de nouveauté est borné aux PMID les plus récents", asyn
 });
 
 test("migrateArticle : articles d'une version précédente", () => {
-  const legacy = migrateArticle({ id: "pmid-1", language: "fr", generator: "extractive", title: "T" });
+  const legacy = migrateArticle({ id: "pmid-1", language: "fr", generator: "extractive", title: "T", topic: { id: "peptides", label: "Peptides thérapeutiques" } });
   assert.deepEqual(legacy.languages, ["fr"]);
   assert.equal(legacy.bodyLanguage, "en");
+  assert.deepEqual(legacy.topic.labels, { fr: "Peptides thérapeutiques", en: "Therapeutic peptides", ar: "الببتيدات العلاجية" });
+  assert.equal(legacy.topic.label, "Peptides thérapeutiques");
+  assert.equal(migrateArticle({ id: "x", topic: { id: "inconnu", label: "?" } }).topic.labels, undefined);
   const claude = migrateArticle({ id: "pmid-2", language: "fr", generator: "claude:claude-opus-5-5" });
   assert.equal(claude.bodyLanguage, null);
   const current = migrateArticle({ id: "pmid-3", language: "fr", languages: ["fr", "en", "ar"], generator: "extractive", bodyLanguage: "en" });

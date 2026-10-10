@@ -119,14 +119,20 @@ export class ArticleGenerator {
     this.schema = buildArticleSchema(languages);
     this.systemPrompt = buildSystemPrompt(languages);
     this.disabledReason = null;
+    /** Code de désactivation : "disabled" | "no-credentials" | "rejected" | null. */
+    this.disabledCode = null;
+    /** Claude confirmé : identifiants fournis (ou client injecté), ou première réponse réussie. */
+    this.confirmed = false;
     if (!claude?.enabled) {
       this.disabledReason = "CLAUDE_ENABLED=false";
+      this.disabledCode = "disabled";
       log.warn(`Claude désactivé (${this.disabledReason})`);
       this.client = null;
     } else {
       // Les identifiants (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, profil `ant auth login`,
       // fédération d'identité) sont résolus par le SDK à la première requête.
       this.client = client ?? new Anthropic({ timeout: claude.timeoutMs, maxRetries: claude.maxRetries ?? 1 });
+      this.confirmed = Boolean(client || process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
       if (!client && !process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
         log.info("ANTHROPIC_API_KEY absente : le SDK cherchera un profil ou une fédération d'identité ; sinon, génération extractive");
       }
@@ -144,9 +150,12 @@ export class ArticleGenerator {
     } catch (err) {
       const kind = classifyError(err);
       if (kind === "auth") {
-        this.disabledReason = /authentication method/i.test(err.message)
+        const missing = /authentication method/i.test(err.message);
+        this.disabledReason = missing
           ? "identifiants Anthropic absents (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN ou profil `ant auth login`)"
           : `identifiants Anthropic refusés (${err.message.split("\n")[0].slice(0, 120)})`;
+        this.disabledCode = missing ? "no-credentials" : "rejected";
+        this.confirmed = false;
         this.client = null;
         log.error(`Claude désactivé pour la suite du processus : ${this.disabledReason} → génération extractive`);
       } else {
@@ -224,6 +233,7 @@ export class ArticleGenerator {
     log.info(
       `Article rédigé en ${this.languages.join("/")} par ${response.model ?? model} (entrée ${usage.input_tokens ?? "?"} / sortie ${usage.output_tokens ?? "?"} jetons)`,
     );
+    this.confirmed = true;
     return { ...validated.data, generator: `claude:${response.model ?? model}`, bodyLanguage: null };
   }
 }

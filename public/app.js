@@ -76,10 +76,19 @@
     articleN: (n) => `المقال ${n}`, originalIn: (name) => `النص الأصلي باللغة ${name}`, language: "اللغة",
     quotaReached: (n) => `اكتمل حدّ اليوم (${n} لكل موضوع) · يُستأنف غدًا`,
     extractiveNotice: "وضع بدون ذكاء اصطناعي: المقالات مقتطفات من ملخصات PubMed بالإنجليزية. أضف مفتاح Anthropic (ANTHROPIC_API_KEY) في ملف .env للحصول على مقالات مكتوبة بالفرنسية والإنجليزية والعربية.",
+    extractiveNoticeDisabled: "وضع بدون ذكاء اصطناعي: المقالات مقتطفات من ملخصات PubMed بالإنجليزية. Claude معطَّل في الإعدادات (CLAUDE_ENABLED=false في ملف .env).",
+    extractiveNoticeRejected: "وضع بدون ذكاء اصطناعي: المقالات مقتطفات من ملخصات PubMed بالإنجليزية. رُفضت بيانات اعتماد Anthropic: تحقق من ANTHROPIC_API_KEY في ملف .env.",
+    versionIn: (name) => `النسخة باللغة ${name}`,
     filterByTopic: "تصفية حسب الموضوع", articlesLandmark: "مقالات علمية",
   };
   STRINGS.fr.extractiveNotice = "Mode sans IA : les articles sont des extraits des résumés PubMed, en anglais. Ajoutez une clé Anthropic (ANTHROPIC_API_KEY) dans le fichier .env pour des articles rédigés en français, en anglais et en arabe.";
   STRINGS.en.extractiveNotice = "No-AI mode: articles are excerpts of PubMed abstracts, in English. Add an Anthropic key (ANTHROPIC_API_KEY) to the .env file to get articles written in French, English and Arabic.";
+  STRINGS.fr.extractiveNoticeDisabled = "Mode sans IA : les articles sont des extraits des résumés PubMed, en anglais. Claude est désactivé par la configuration (CLAUDE_ENABLED=false dans le fichier .env).";
+  STRINGS.en.extractiveNoticeDisabled = "No-AI mode: articles are excerpts of PubMed abstracts, in English. Claude is disabled by configuration (CLAUDE_ENABLED=false in the .env file).";
+  STRINGS.fr.extractiveNoticeRejected = "Mode sans IA : les articles sont des extraits des résumés PubMed, en anglais. Les identifiants Anthropic ont été refusés : vérifiez ANTHROPIC_API_KEY dans le fichier .env.";
+  STRINGS.en.extractiveNoticeRejected = "No-AI mode: articles are excerpts of PubMed abstracts, in English. The Anthropic credentials were rejected: check ANTHROPIC_API_KEY in the .env file.";
+  STRINGS.fr.versionIn = (name) => `Version en ${name}`;
+  STRINGS.en.versionIn = (name) => `Version in ${name}`;
   STRINGS.fr.quotaReached = (n) => `Quota du jour atteint (${n} par sujet) · reprise demain`;
   STRINGS.en.quotaReached = (n) => `Daily quota reached (${n} per topic) · resumes tomorrow`;
   STRINGS.fr.originalIn = (name) => `Texte original en ${name}`;
@@ -193,10 +202,12 @@
   function originalNote(article) {
     const { key } = versionOf(article);
     // Les articles extractifs d'une version précédente n'indiquent pas la langue du corps : c'est l'anglais du résumé.
-    const shown = article.bodyLanguage || (article.generator === "extractive" ? "en" : key);
-    if (!shown || shown === lang) return "";
-    const name = (LANG_NAMES_IN[lang] || {})[shown] || shown;
-    return `<span class="original">${esc(T.originalIn(name))}</span>`;
+    const body = article.bodyLanguage || (article.generator === "extractive" ? "en" : key);
+    const nameOf = (l) => (LANG_NAMES_IN[lang] || {})[l] || l;
+    const notes = [];
+    if (key !== lang) notes.push(T.versionIn(nameOf(key))); // aucune version dans la langue de l'interface (article ancien)
+    if (body && body !== lang && body !== key) notes.push(T.originalIn(nameOf(body))); // corps dans une autre langue (mode extractif)
+    return notes.length ? `<span class="original">${esc(notes.join(" · "))}</span>` : "";
   }
 
   function slideHtml(article, i, total) {
@@ -500,12 +511,21 @@
     state.status = Object.assign(state.status || {}, patch);
     const s = state.status;
     els.statusCount.textContent = T.articles(s.articleCount || state.articles.length);
-    // Mode sans IA : d'après le serveur (après son premier tour) ou d'après le dernier article affiché.
-    const statusSaysExtractive = Boolean(s.generators && typeof s.generators.article === "string" && s.generators.article.startsWith("extractive"));
+    // Mode sans IA : d'après le serveur ; tant que celui-ci n'a pas confirmé Claude (identifiants résolus
+    // à la première requête), le dernier article affiché fait foi. Un repli ponctuel (réseau, limite de
+    // débit…) alors que Claude est confirmé ne doit pas afficher « ajoutez une clé ».
+    const g = s.generators && typeof s.generators.article === "string" ? s.generators : null;
+    const statusSaysExtractive = Boolean(g && g.article.startsWith("extractive"));
+    const confirmed = Boolean(g && g.articleConfirmed);
     const latest = state.articles[0];
-    const extractive = statusSaysExtractive || Boolean(latest && latest.generator === "extractive");
+    const extractive = statusSaysExtractive || (!confirmed && Boolean(latest && latest.generator === "extractive"));
     els.notice.hidden = !extractive;
-    if (extractive) els.notice.textContent = T.extractiveNotice;
+    if (extractive) {
+      const code = (g && g.articleReason) || "no-credentials";
+      const text = code === "disabled" ? T.extractiveNoticeDisabled : code === "rejected" ? T.extractiveNoticeRejected : T.extractiveNotice;
+      // Les jetons techniques restent lisibles de gauche à droite, y compris en arabe.
+      els.notice.innerHTML = esc(text).replace(/(\.env|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|CLAUDE_ENABLED=false)/g, '<code dir="ltr">$1</code>');
+    }
   }
 
   /* Au premier statut reçu : langue mémorisée par l'utilisateur si elle est proposée, sinon langue du serveur. */

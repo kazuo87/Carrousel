@@ -100,9 +100,11 @@ test("ArticleGenerator : sans identifiants → extractif, Claude désactivé à 
   try {
     const gen = new ArticleGenerator({ claude, languages: LANGS });
     assert.equal(gen.usesClaude, true, "le SDK résout les identifiants à la première requête");
+    assert.equal(gen.confirmed, false, "pas encore confirmé sans identifiants dans l'environnement");
     const a = await gen.generate(recordByPmid("40000001"), topic);
     assert.equal(a.generator, "extractive");
     assert.deepEqual(Object.keys(a.content), LANGS);
+    assert.equal(gen.disabledCode, "no-credentials");
     assert.equal(gen.usesClaude, false);
     assert.match(gen.disabledReason, /identifiants/);
   } finally {
@@ -115,14 +117,17 @@ test("ArticleGenerator : sans identifiants → extractif, Claude désactivé à 
 test("ArticleGenerator : CLAUDE_ENABLED=false → extractif sans client", async () => {
   const gen = new ArticleGenerator({ claude: { ...claude, enabled: false }, languages: ["fr"] });
   assert.equal(gen.usesClaude, false);
+  assert.equal(gen.disabledCode, "disabled");
   assert.equal((await gen.generate(recordByPmid("40000001"), topic)).generator, "extractive");
 });
 
 test("ArticleGenerator : requête structurée, cache et repli serveur", async () => {
   const client = fakeClient(() => textResponse(validArticle, { usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 900 } }));
   const gen = new ArticleGenerator({ claude, languages: LANGS, client });
+  assert.equal(gen.confirmed, true, "client injecté = identifiants fournis");
   const a = await gen.generate(recordByPmid("40000001"), topic);
   assert.equal(a.generator, "claude:claude-opus-5-5");
+  assert.equal(gen.confirmed, true);
   assert.equal(a.content.fr.title, frContent.title);
   assert.equal(a.content.ar.title, arContent.title);
   assert.equal(a.bodyLanguage, null);
@@ -213,6 +218,8 @@ test("ArticleGenerator : erreur d'authentification → Claude désactivé durabl
   const a = await gen.generate(recordByPmid("40000001"), topic);
   assert.equal(a.generator, "extractive");
   assert.equal(gen.usesClaude, false);
+  assert.equal(gen.confirmed, false);
+  assert.equal(gen.disabledCode, "rejected");
   assert.match(gen.disabledReason, /identifiants/);
   await gen.generate(recordByPmid("40000002"), topic);
   assert.equal(client.calls.length, 1, "plus aucun appel après désactivation");
@@ -224,6 +231,8 @@ test("ArticleGenerator : limite de débit → extractif pour ce tour seulement",
   const a = await gen.generate(recordByPmid("40000001"), topic);
   assert.equal(a.generator, "extractive");
   assert.equal(gen.usesClaude, true);
+  assert.equal(gen.confirmed, true, "un repli ponctuel ne remet pas en cause les identifiants");
+  assert.equal(gen.disabledCode, null);
 });
 
 test("classifyError", () => {
