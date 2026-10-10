@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildConfig } from "../src/config.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { buildConfig, loadDotEnv } from "../src/config.js";
 import { getTopics, buildQuery, TOPICS } from "../src/topics.js";
 
 test("buildConfig : valeurs par défaut", () => {
@@ -47,4 +50,24 @@ test("topics : sélection et requêtes", () => {
     assert.ok(!t.keywords.includes("mic"), "« mic » est un préfixe de mice/microbiome : trop ambigu");
   }
   assert.match(getTopics(["essais-cliniques"])[0].query, /"randomized"\[tiab\]/);
+});
+
+test("loadDotEnv : valeurs vides ignorées, ligne ajoutée en fin de fichier prise en compte, environnement non écrasé", () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "dotenv-")), ".env");
+  fs.writeFileSync(file, ['# commentaire', 'TEST_DOTENV_KEY=', 'TEST_DOTENV_QUOTED="avec espaces"', 'TEST_DOTENV_EXISTING=fichier', 'TEST_DOTENV_KEY=valeur-finale', ''].join("\n"));
+  process.env.TEST_DOTENV_EXISTING = "environnement";
+  delete process.env.TEST_DOTENV_KEY;
+  delete process.env.TEST_DOTENV_QUOTED;
+  try {
+    loadDotEnv(file);
+    assert.equal(process.env.TEST_DOTENV_KEY, "valeur-finale");
+    assert.equal(process.env.TEST_DOTENV_QUOTED, "avec espaces");
+    assert.equal(process.env.TEST_DOTENV_EXISTING, "environnement");
+    loadDotEnv(path.join(path.dirname(file), "absent.env")); // fichier absent : silencieux
+  } finally {
+    delete process.env.TEST_DOTENV_KEY;
+    delete process.env.TEST_DOTENV_QUOTED;
+    delete process.env.TEST_DOTENV_EXISTING;
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  }
 });

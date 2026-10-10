@@ -15,7 +15,8 @@ PubMed (E-utilities) ──▶ filtre nouveauté + pertinence ──▶ rédacti
 
 ```bash
 npm install
-cp .env.example .env        # puis renseigner ANTHROPIC_API_KEY (et NCBI_EMAIL)
+cp .env.example .env        # puis renseigner ANTHROPIC_API_KEY (et NCBI_EMAIL)…
+echo "ANTHROPIC_API_KEY=sk-ant-…" >> .env   # …ou simplement ajouter les lignes en fin de fichier
 npm start                   # http://localhost:3000
 ```
 

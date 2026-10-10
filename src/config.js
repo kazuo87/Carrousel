@@ -23,6 +23,9 @@ export function loadDotEnv(file = path.join(ROOT_DIR, ".env")) {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
+    // Une valeur vide (ligne « CLE= » de .env.example) ne définit rien : une ligne ajoutée plus bas,
+    // par exemple avec `echo "CLE=valeur" >> .env`, prend alors effet.
+    if (value === "") continue;
     if (process.env[key] === undefined) process.env[key] = value;
   }
 }
