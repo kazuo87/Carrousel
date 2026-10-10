@@ -37,6 +37,12 @@ test("buildConfig : surcharge et validation", () => {
   assert.deepEqual(buildConfig({ LANGUAGES: "fr,fr,en" }).languages, ["fr", "en"], "doublons ignorés");
   assert.equal(buildConfig({ LANGUAGES: "en,ar", ARTICLE_LANGUAGE: "" }).articleLanguage, "en");
   assert.equal(buildConfig({}).claude.hardTimeoutMs, 300000);
+  assert.equal(buildConfig({}).maxPerTopicPerDay, 5);
+  assert.equal(buildConfig({ MAX_PER_TOPIC_PER_DAY: "0" }).maxPerTopicPerDay, 0);
+  assert.throws(() => buildConfig({ MAX_PER_TOPIC_PER_DAY: "-1" }), /MAX_PER_TOPIC_PER_DAY/);
+  assert.equal(buildConfig({ TIMEZONE: "Africa/Algiers" }).timeZone, "Africa/Algiers");
+  assert.throws(() => buildConfig({ TIMEZONE: "Mars/Olympus" }), /TIMEZONE/);
+  assert.ok(buildConfig({}).timeZone.length > 0, "fuseau du système par défaut");
   assert.equal(buildConfig({ CLAUDE_HARD_TIMEOUT_MS: "360000" }).claude.hardTimeoutMs, 324000, "borné à 90 % de l'intervalle");
   assert.equal(buildConfig({ INTERVAL_MINUTES: "0.1" }).claude.hardTimeoutMs, 5400);
   assert.throws(() => buildConfig({ IMAGE_PROVIDER: "dalle" }), /IMAGE_PROVIDER/);

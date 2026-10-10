@@ -79,6 +79,9 @@ export function buildConfig(env = process.env) {
       articleLanguage: str("ARTICLE_LANGUAGE", ""),
       topics: list("TOPICS", []), // vide = tous les sujets
       maxArticles: num("MAX_ARTICLES", 500),
+      // Quota journalier par sujet (0 = illimité) et fuseau horaire servant à définir la journée.
+      maxPerTopicPerDay: num("MAX_PER_TOPIC_PER_DAY", 5),
+      timeZone: str("TIMEZONE", Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
       dataDir,
       imagesDir: path.join(dataDir, "images"),
 
@@ -129,6 +132,12 @@ export function buildConfig(env = process.env) {
       throw new Error(`LANGUAGES doit contenir des codes parmi ${SUPPORTED_LANGUAGES.join(", ")} (reçu : ${unsupported.join(", ") || "vide"})`);
     }
     if (!cfg.articleLanguage) cfg.articleLanguage = cfg.languages[0];
+    if (cfg.maxPerTopicPerDay < 0) throw new Error("MAX_PER_TOPIC_PER_DAY doit être ≥ 0 (0 = illimité)");
+    try {
+      new Intl.DateTimeFormat("en-CA", { timeZone: cfg.timeZone });
+    } catch {
+      throw new Error(`TIMEZONE invalide : ${cfg.timeZone} (attendu un identifiant IANA, ex. Europe/Paris)`);
+    }
     if (!cfg.languages.includes(cfg.articleLanguage)) {
       throw new Error(`ARTICLE_LANGUAGE (${cfg.articleLanguage}) doit faire partie de LANGUAGES (${cfg.languages.join(", ")})`);
     }

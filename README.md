@@ -22,8 +22,10 @@ npm start                   # http://localhost:3000
 
 Le bot génère un premier article immédiatement, puis un nouvel article toutes les 6 minutes
 (`INTERVAL_MINUTES`), sur une grille de temps fixe (la durée d'un tour ne décale pas les suivants ; un
-créneau manqué est sauté, pas rattrapé). Le carrousel se met à jour en direct (flux SSE) sans
-recharger la page.
+créneau manqué est sauté, pas rattrapé), dans la limite de **5 articles par sujet et par jour**
+(`MAX_PER_TOPIC_PER_DAY`, journée calculée dans le fuseau `TIMEZONE`). Quand tous les sujets ont
+atteint leur quota, les tours suivants ne font aucune requête et le carrousel affiche « Quota du jour
+atteint » jusqu'au lendemain. Le carrousel se met à jour en direct (flux SSE) sans recharger la page.
 
 Sans `ANTHROPIC_API_KEY`, le bot fonctionne quand même : les articles sont construits par un
 générateur **extractif** (sections et points clés tirés du résumé PubMed ; le corps reste en anglais,
@@ -137,6 +139,8 @@ Toutes les options sont documentées dans [`.env.example`](.env.example). Les pl
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `INTERVAL_MINUTES` | `6` | Cadence de génération |
+| `MAX_PER_TOPIC_PER_DAY` | `5` | Quota journalier par sujet (`0` = illimité) |
+| `TIMEZONE` | fuseau du système | Fuseau horaire de la journée du quota (ex. `Europe/Paris`) |
 | `LANGUAGES` | `fr,en,ar` | Langues produites et proposées (`fr`, `en`, `ar`) |
 | `ARTICLE_LANGUAGE` | première de `LANGUAGES` | Langue principale (interface par défaut, champs de premier niveau de l'API) |
 | `TOPICS` | tous | Sous-ensemble et ordre de rotation des sujets |
@@ -149,9 +153,10 @@ Toutes les options sont documentées dans [`.env.example`](.env.example). Les pl
 
 ### Coût indicatif
 
-À 6 minutes d'intervalle, le bot rédige 240 articles par jour. Avec `claude-opus-5-5` et les trois
-langues, environ 2 000 jetons d'entrée par article et 4 000 à 6 000 jetons de sortie (trois versions
-et raisonnement adaptatif compris, selon `CLAUDE_EFFORT`), comptez de l'ordre de 25 à 35 $ par jour ;
+Avec le quota par défaut (5 articles × 8 sujets), le bot rédige au plus 40 articles par jour. Avec
+`claude-opus-5-5` et les trois langues, environ 2 000 jetons d'entrée par article et 4 000 à 6 000
+jetons de sortie (trois versions et raisonnement adaptatif compris, selon `CLAUDE_EFFORT`), comptez
+de l'ordre de 4 à 6 $ par jour (25 à 35 $ sans quota, à 240 articles par jour) ;
 `LANGUAGES=fr` ramène la sortie à un tiers et `CLAUDE_MODEL=claude-sonnet-5-5` divise le coût par deux.
 Le prompt système est trop court pour bénéficier du cache de prompts. Le générateur extractif et les
 illustrations SVG sont gratuits.

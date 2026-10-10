@@ -123,7 +123,7 @@ export function publicErrorMessage(message) {
  * @param {object[]} deps.topics
  * @param {object} deps.meta  Informations sur les générateurs utilisés
  */
-export function createServer({ config, store, scheduler, runNow, topics, meta }) {
+export function createServer({ config, store, scheduler, runNow, topics, meta, getQuota = null }) {
   const clients = new Set();
 
   store.onArticle((article) => {
@@ -184,6 +184,7 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
             languages: config.languages,
             articleCount: store.articles.length,
             seenCount: store.seen.pmids.size,
+            quota: getQuota ? getQuota() : null,
             scheduler: scheduler ? scheduler.status() : null,
             state: {
               runs: store.state.runs,

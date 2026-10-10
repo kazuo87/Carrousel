@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { Pipeline } from "../src/pipeline.js";
+import { Pipeline, dayKeyFor } from "../src/pipeline.js";
 import { Scheduler } from "../src/scheduler.js";
 import { Store } from "../src/store.js";
 import { PubMedClient } from "../src/pubmed.js";
@@ -158,6 +158,68 @@ test("Pipeline.runOnce : un sujet en erreur n'affame pas les autres", async () =
     const second = await ctx.pipeline.runOnce();
     assert.equal(second.status, "created");
     assert.equal(second.article.topic.id, "biosimilaires");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("dayKeyFor : journée dans un fuseau horaire", () => {
+  const t = Date.parse("2026-10-10T23:30:00Z");
+  assert.equal(dayKeyFor(t, "UTC"), "2026-10-10");
+  assert.equal(dayKeyFor(t, "Europe/Paris"), "2026-10-11");
+  assert.equal(dayKeyFor(t, "America/Los_Angeles"), "2026-10-10");
+});
+
+test("Pipeline.runOnce : quota journalier par sujet, puis reprise le lendemain", async () => {
+  const ctx = await setup({ topics: ["peptides", "biosimilaires"] });
+  try {
+    ctx.pipeline.config.maxPerTopicPerDay = 1;
+    ctx.pipeline.config.timeZone = "UTC";
+    let clock = Date.parse("2026-10-10T10:00:00Z");
+    ctx.pipeline.now = () => clock;
+    // Toute recherche renvoie les deux notices pertinentes : sans quota, chaque sujet en publierait une par tour.
+    ctx.pipeline.pubmed.search = async () => ({ ids: ["40000002", "40000001"], count: 2 });
+
+    const first = await ctx.pipeline.runOnce();
+    assert.equal(first.status, "created");
+    assert.equal(first.article.topic.id, "peptides");
+    assert.deepEqual(ctx.pipeline.quota().counts, { peptides: 1, biosimilaires: 0 });
+    assert.equal(ctx.pipeline.quota().remainingToday, 1);
+
+    const second = await ctx.pipeline.runOnce();
+    assert.equal(second.status, "created");
+    assert.equal(second.article.topic.id, "biosimilaires", "le sujet au quota est sauté");
+
+    const calls = ctx.mock.calls.length;
+    const third = await ctx.pipeline.runOnce();
+    assert.equal(third.status, "skipped");
+    assert.match(third.reason, /quota journalier atteint \(1 article\(s\) par sujet\)/);
+    assert.equal(ctx.mock.calls.length, calls, "aucune requête NCBI quand tous les sujets sont au quota");
+    assert.equal(ctx.pipeline.quota().remainingToday, 0);
+    assert.equal(ctx.store.state.lastResult.status, "skipped");
+
+    // Le lendemain, le quota est libéré : le tour interroge de nouveau NCBI (la seule notice inédite,
+    // 40000004, est hors sujet pour ces deux thèmes, d'où un tour sans article mais pas pour cause de quota).
+    clock = Date.parse("2026-10-11T00:05:00Z");
+    ctx.pipeline.pubmed.search = async () => ({ ids: ["40000004"], count: 1 });
+    assert.deepEqual(ctx.pipeline.quota().counts, { peptides: 0, biosimilaires: 0 });
+    assert.equal(ctx.pipeline.quota().remainingToday, 2);
+    const before = ctx.mock.calls.length;
+    const fourth = await ctx.pipeline.runOnce();
+    assert.equal(fourth.status, "skipped");
+    assert.match(fourth.reason, /aucune notice nouvelle et pertinente/);
+    assert.ok(ctx.mock.calls.length > before, "les notices sont de nouveau téléchargées");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("Pipeline.runOnce : quota 0 = illimité", async () => {
+  const ctx = await setup({ topics: ["peptides"] });
+  try {
+    ctx.pipeline.config.maxPerTopicPerDay = 0;
+    assert.equal((await ctx.pipeline.runOnce()).status, "created");
+    assert.equal(ctx.pipeline.quota().remainingToday, null);
   } finally {
     await ctx.cleanup();
   }

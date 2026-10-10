@@ -42,9 +42,14 @@ export async function createApp({ withScheduler = true } = {}) {
     manualRun = pipeline.runOnce().finally(() => { manualRun = null; });
     return manualRun;
   };
-  const server = createServer({ config, store, scheduler, runNow, topics, meta });
+  const server = createServer({ config, store, scheduler, runNow, topics, meta, getQuota: () => pipeline.quota() });
   log.info(`Générateur d'articles : ${meta.article} · images : ${meta.image} · langues : ${config.languages.join(", ")} · sujets : ${meta.topics.join(", ")}`);
   if (!config.pubmed.email) log.warn("NCBI_EMAIL non défini : recommandé par NCBI pour identifier l'outil");
+  log.info(
+    config.maxPerTopicPerDay > 0
+      ? `Quota : ${config.maxPerTopicPerDay} article(s) par sujet et par jour (journée ${config.timeZone})`
+      : "Quota journalier désactivé (MAX_PER_TOPIC_PER_DAY=0)",
+  );
   if (!config.adminToken && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
     log.warn("ADMIN_TOKEN non défini : POST /api/run n'est accepté que depuis une connexion locale directe");
   }

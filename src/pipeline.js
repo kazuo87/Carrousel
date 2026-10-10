@@ -9,6 +9,11 @@ import { createLogger } from "./logger.js";
 
 const log = createLogger("pipeline");
 const MAX_FETCH = 25;
+
+/** Clé de journée (AAAA-MM-JJ) d'un instant dans un fuseau horaire donné. */
+export function dayKeyFor(timestamp, timeZone) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(timestamp));
+}
 /** Pages esearch parcourues au maximum par fenêtre de dates (retmax identifiants par page). */
 const MAX_PAGES = 5;
 const DAY_MS = 86_400_000;
@@ -32,6 +37,23 @@ export class Pipeline {
     this.imageProvider = imageProvider;
     this.topics = topics;
     this.now = now;
+  }
+
+  /** Nombre d'articles déjà publiés aujourd'hui pour un sujet (journée du fuseau configuré). */
+  countToday(topicId, today = dayKeyFor(this.now(), this.config.timeZone)) {
+    const tz = this.config.timeZone;
+    return this.store.articles.filter((a) => a.topic?.id === topicId && dayKeyFor(Date.parse(a.createdAt), tz) === today).length;
+  }
+
+  /** État du quota journalier (exposé par /api/status). */
+  quota() {
+    const perTopicPerDay = this.config.maxPerTopicPerDay;
+    const today = dayKeyFor(this.now(), this.config.timeZone);
+    const counts = Object.fromEntries(this.topics.map((t) => [t.id, this.countToday(t.id, today)]));
+    const remainingToday = perTopicPerDay > 0
+      ? Object.values(counts).reduce((sum, n) => sum + Math.max(0, perTopicPerDay - n), 0)
+      : null;
+    return { perTopicPerDay, timeZone: this.config.timeZone, date: today, counts, remainingToday };
   }
 
   /** Ordre de parcours des sujets : rotation à partir du curseur persistant. */
@@ -101,10 +123,16 @@ export class Pipeline {
   async runOnce() {
     const startedAt = new Date(this.now()).toISOString();
     const order = this.topicOrder();
+    const cap = this.config.maxPerTopicPerDay;
+    let capped = 0;
     let topic = null;
     try {
       for (let i = 0; i < order.length; i++) {
         topic = order[i];
+        if (cap > 0 && this.countToday(topic.id) >= cap) {
+          capped += 1;
+          continue; // quota du jour atteint pour ce sujet : aucune requête NCBI
+        }
         const candidate = await this.findCandidate(topic);
         if (!candidate) continue;
         const article = await this.createArticle(candidate, topic);
@@ -119,16 +147,20 @@ export class Pipeline {
         });
         return { status: "created", article };
       }
+      const reason = capped === order.length
+        ? `quota journalier atteint (${cap} article(s) par sujet)`
+        : "aucune notice nouvelle et pertinente";
       await this.store.saveSeen();
       await this.store.saveState({
         topicCursor: this.cursorAfter(order[0]),
         runs: (this.store.state.runs ?? 0) + 1,
         lastRunAt: startedAt,
         lastError: null,
-        lastResult: { status: "skipped", reason: "aucune notice nouvelle et pertinente" },
+        lastResult: { status: "skipped", reason },
       });
-      log.warn("Aucune notice nouvelle et pertinente trouvée pour ce tour");
-      return { status: "skipped", reason: "aucune notice nouvelle et pertinente" };
+      if (capped === order.length) log.info(`Tour sans génération : ${reason}`);
+      else log.warn(`Aucune notice nouvelle et pertinente trouvée pour ce tour${capped ? ` (${capped} sujet(s) au quota)` : ""}`);
+      return { status: "skipped", reason };
     } catch (err) {
       log.error(`Échec du tour${topic ? ` (sujet ${topic.id})` : ""} : ${err.message}`);
       await this.store.saveSeen().catch(() => {});

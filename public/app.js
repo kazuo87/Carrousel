@@ -74,8 +74,11 @@
     emptyAll: "لا توجد مقالات بعد: سيتم إنشاء أول مقال خلال لحظات.",
     emptyFilter: "لا توجد مقالات لهذا الموضوع بعد.", loadError: "تعذّر تحميل المقالات.",
     articleN: (n) => `المقال ${n}`, originalIn: (name) => `النص الأصلي باللغة ${name}`, language: "اللغة",
+    quotaReached: (n) => `اكتمل حدّ اليوم (${n} لكل موضوع) · يُستأنف غدًا`,
     filterByTopic: "تصفية حسب الموضوع", articlesLandmark: "مقالات علمية",
   };
+  STRINGS.fr.quotaReached = (n) => `Quota du jour atteint (${n} par sujet) · reprise demain`;
+  STRINGS.en.quotaReached = (n) => `Daily quota reached (${n} per topic) · resumes tomorrow`;
   STRINGS.fr.originalIn = (name) => `Texte original en ${name}`;
   STRINGS.en.originalIn = (name) => `Original text in ${name}`;
   STRINGS.fr.language = "Langue";
@@ -529,6 +532,10 @@
     const s = state.status;
     if (!s || !s.scheduler) { els.statusNext.textContent = ""; return; }
     if (s.scheduler.running) { els.statusNext.textContent = `${T.next} ${T.now}`; return; }
+    if (s.quota && s.quota.perTopicPerDay > 0 && s.quota.remainingToday === 0) {
+      els.statusNext.textContent = T.quotaReached(s.quota.perTopicPerDay);
+      return;
+    }
     if (!s.scheduler.nextRunAt) { els.statusNext.textContent = ""; return; }
     const serverNow = Date.now() - state.clockOffset;
     const remaining = Math.max(0, new Date(s.scheduler.nextRunAt).getTime() - serverNow);

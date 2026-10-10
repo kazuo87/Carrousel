@@ -29,7 +29,8 @@ async function startApp({ adminToken = "", withScheduler = true } = {}) {
   const runNow = async () => { runs.push(1); const a = sample(100 + runs.length); fs.writeFileSync(path.join(images, a.image.file), "<svg/>"); await store.addArticle(a); return { status: "created", article: a }; };
   const scheduler = withScheduler ? new Scheduler({ intervalMs: 60_000, task: runNow, runOnStart: false }) : null;
   await store.saveState({ lastError: { at: "2026-10-10T00:00:00Z", message: "Fichier /srv/carrousel/data/seen.json illisible : EACCES" } });
-  const server = createServer({ config, store, scheduler, runNow, topics: getTopics([]), meta: { article: "extractive (ANTHROPIC_API_KEY absente)", image: "svg" } });
+  const getQuota = () => ({ perTopicPerDay: 5, timeZone: "UTC", date: "2026-10-10", counts: { peptides: 1 }, remainingToday: 39 });
+  const server = createServer({ config, store, scheduler, runNow, topics: getTopics([]), meta: { article: "extractive (ANTHROPIC_API_KEY absente)", image: "svg" }, getQuota });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, store, runs, config, close: async () => { await new Promise((r) => server.close(r)); await cleanup(); } };
@@ -69,6 +70,8 @@ test("serveur : page, API, images et sécurité", async () => {
     assert.equal(status.intervalMinutes, 6);
     assert.equal(status.scheduler.running, false);
     assert.deepEqual(status.languages, ["fr", "en", "ar"]);
+    assert.equal(status.quota.perTopicPerDay, 5);
+    assert.equal(status.quota.remainingToday, 39);
     assert.equal(status.language, "fr");
     assert.equal(status.generators.article, "extractive (ANTHROPIC_API_KEY absente)");
     assert.equal(status.state.lastError.message, "Fichier … illisible : EACCES", "chemins absolus masqués");
