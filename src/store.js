@@ -39,6 +39,16 @@ function readJson(file, fallback) {
   }
 }
 
+/** Complète les articles enregistrés par une version précédente (avant les versions par langue). */
+export function migrateArticle(article) {
+  if (!article || typeof article !== "object") return article;
+  const migrated = { ...article };
+  if (!Array.isArray(migrated.languages)) migrated.languages = migrated.language ? [migrated.language] : [];
+  // Le générateur extractif a toujours produit un corps de texte en anglais (celui du résumé PubMed).
+  if (migrated.bodyLanguage === undefined) migrated.bodyLanguage = migrated.generator === "extractive" ? "en" : null;
+  return migrated;
+}
+
 export class Store {
   constructor({ dataDir, imagesDir, maxArticles = 500 }) {
     this.dataDir = dataDir;
@@ -57,7 +67,7 @@ export class Store {
     await fsp.mkdir(this.imagesDir, { recursive: true });
     await this.cleanTempFiles();
     const articles = readJson(this.files.articles, []);
-    this.articles = Array.isArray(articles) ? articles : [];
+    this.articles = (Array.isArray(articles) ? articles : []).map(migrateArticle);
     const seenRaw = readJson(this.files.seen, {});
     this.seen = {
       pmids: new Set((seenRaw.pmids ?? []).map(String)),

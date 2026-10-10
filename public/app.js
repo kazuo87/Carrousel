@@ -23,7 +23,7 @@
     prev: $("prev"), next: $("next"), play: $("play"), progress: $("progress").firstElementChild,
     filters: $("filters"), empty: $("empty"), reader: $("reader"), readerContent: $("reader-content"),
     readerClose: $("reader-close"), toast: $("toast"), statusCount: $("status-count"), statusNext: $("status-next"),
-    carousel: $("carousel"), langSwitch: $("lang-switch"),
+    carousel: $("carousel"), langSwitch: $("lang-switch"), notice: $("notice"),
   };
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -75,8 +75,11 @@
     emptyFilter: "لا توجد مقالات لهذا الموضوع بعد.", loadError: "تعذّر تحميل المقالات.",
     articleN: (n) => `المقال ${n}`, originalIn: (name) => `النص الأصلي باللغة ${name}`, language: "اللغة",
     quotaReached: (n) => `اكتمل حدّ اليوم (${n} لكل موضوع) · يُستأنف غدًا`,
+    extractiveNotice: "وضع بدون ذكاء اصطناعي: المقالات مقتطفات من ملخصات PubMed بالإنجليزية. أضف مفتاح Anthropic (ANTHROPIC_API_KEY) في ملف .env للحصول على مقالات مكتوبة بالفرنسية والإنجليزية والعربية.",
     filterByTopic: "تصفية حسب الموضوع", articlesLandmark: "مقالات علمية",
   };
+  STRINGS.fr.extractiveNotice = "Mode sans IA : les articles sont des extraits des résumés PubMed, en anglais. Ajoutez une clé Anthropic (ANTHROPIC_API_KEY) dans le fichier .env pour des articles rédigés en français, en anglais et en arabe.";
+  STRINGS.en.extractiveNotice = "No-AI mode: articles are excerpts of PubMed abstracts, in English. Add an Anthropic key (ANTHROPIC_API_KEY) to the .env file to get articles written in French, English and Arabic.";
   STRINGS.fr.quotaReached = (n) => `Quota du jour atteint (${n} par sujet) · reprise demain`;
   STRINGS.en.quotaReached = (n) => `Daily quota reached (${n} per topic) · resumes tomorrow`;
   STRINGS.fr.originalIn = (name) => `Texte original en ${name}`;
@@ -189,7 +192,8 @@
 
   function originalNote(article) {
     const { key } = versionOf(article);
-    const shown = article.bodyLanguage || key;
+    // Les articles extractifs d'une version précédente n'indiquent pas la langue du corps : c'est l'anglais du résumé.
+    const shown = article.bodyLanguage || (article.generator === "extractive" ? "en" : key);
     if (!shown || shown === lang) return "";
     const name = (LANG_NAMES_IN[lang] || {})[shown] || shown;
     return `<span class="original">${esc(T.originalIn(name))}</span>`;
@@ -432,6 +436,7 @@
     state.articles = articles.articles;
     renderFilters();
     render();
+    updateStatus({});
   }
 
   function insertArticles(list) {
@@ -495,6 +500,12 @@
     state.status = Object.assign(state.status || {}, patch);
     const s = state.status;
     els.statusCount.textContent = T.articles(s.articleCount || state.articles.length);
+    // Mode sans IA : d'après le serveur (après son premier tour) ou d'après le dernier article affiché.
+    const statusSaysExtractive = Boolean(s.generators && typeof s.generators.article === "string" && s.generators.article.startsWith("extractive"));
+    const latest = state.articles[0];
+    const extractive = statusSaysExtractive || Boolean(latest && latest.generator === "extractive");
+    els.notice.hidden = !extractive;
+    if (extractive) els.notice.textContent = T.extractiveNotice;
   }
 
   /* Au premier statut reçu : langue mémorisée par l'utilisateur si elle est proposée, sinon langue du serveur. */

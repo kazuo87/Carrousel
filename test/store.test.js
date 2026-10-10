@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { Store } from "../src/store.js";
+import { Store, migrateArticle } from "../src/store.js";
 import { tmpDir } from "./helpers.js";
 
 const article = (n) => ({
@@ -85,6 +85,28 @@ test("Store : l'index de nouveauté est borné aux PMID les plus récents", asyn
     assert.equal(store.seen.pmids.has("1"), false);
     assert.equal(store.seen.pmids.has(String(MAX_SEEN_PMIDS + 10)), true);
     assert.equal(store.isRejected("peptides", "3"), false, "rejet oublié avec le PMID");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("migrateArticle : articles d'une version précédente", () => {
+  const legacy = migrateArticle({ id: "pmid-1", language: "fr", generator: "extractive", title: "T" });
+  assert.deepEqual(legacy.languages, ["fr"]);
+  assert.equal(legacy.bodyLanguage, "en");
+  const claude = migrateArticle({ id: "pmid-2", language: "fr", generator: "claude:claude-opus-5-5" });
+  assert.equal(claude.bodyLanguage, null);
+  const current = migrateArticle({ id: "pmid-3", language: "fr", languages: ["fr", "en", "ar"], generator: "extractive", bodyLanguage: "en" });
+  assert.deepEqual(current.languages, ["fr", "en", "ar"]);
+});
+
+test("Store.init : les articles anciens sont complétés au chargement", async () => {
+  const { dir, images, cleanup } = await tmpDir();
+  try {
+    fs.writeFileSync(path.join(dir, "articles.json"), JSON.stringify([{ id: "pmid-9", language: "fr", generator: "extractive", title: "Ancien", source: { pmid: "9", title: "Ancien" } }]));
+    const store = await new Store({ dataDir: dir, imagesDir: images }).init();
+    assert.equal(store.articles[0].bodyLanguage, "en");
+    assert.deepEqual(store.articles[0].languages, ["fr"]);
   } finally {
     await cleanup();
   }

@@ -59,6 +59,12 @@ body {
 .filters button:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.25); }
 .filters button[aria-pressed="true"] { background: var(--chip, var(--accent)); color: #0b1020; border-color: transparent; font-weight: 600; }
 
+.notice {
+  margin: 0 28px 14px; padding: 10px 14px; border-radius: 12px; font-size: 0.85rem; color: #fde68a;
+  background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.notice code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; }
+
 main { padding: 0 28px 28px; }
 
 .carousel { position: relative; max-width: 1280px; margin: 0 auto; }
@@ -166,6 +172,7 @@ dialog#reader::backdrop { background: rgba(3, 6, 16, 0.75); backdrop-filter: blu
 
 @media (max-width: 860px) {
   .topbar, .filters, main { padding-left: 16px; padding-right: 16px; }
+  .notice { margin-left: 16px; margin-right: 16px; }
   .slide { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 0; }
   .slide-media { aspect-ratio: 16 / 9; min-width: 0; }
   .slide-media img { height: 100%; }
