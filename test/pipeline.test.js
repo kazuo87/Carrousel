@@ -36,6 +36,8 @@ test("Pipeline.runOnce : crée un article nouveau et pertinent, puis tourne sur 
     assert.equal(a.source.pmid, "40000001", "l'erratum 40000003 est écarté");
     assert.equal(a.id, "pmid-40000001");
     assert.ok(fs.existsSync(path.join(ctx.config.imagesDir, "pmid-40000001.svg")));
+    const svg = fs.readFileSync(path.join(ctx.config.imagesDir, "pmid-40000001.svg"), "utf8");
+    assert.ok(!svg.includes("<title>") && !svg.includes("Biosimilaires"), "illustration sans légende dans une langue donnée");
     assert.equal(a.image.url, "/images/pmid-40000001.svg");
     assert.equal(a.image.provider, "svg");
     assert.equal(a.language, "fr");

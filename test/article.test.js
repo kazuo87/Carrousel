@@ -55,15 +55,19 @@ const validArticle = {
 };
 const LANGS = ["fr", "en", "ar"];
 
+/** Faux client : beta.messages.stream(params, options).finalMessage() comme le SDK. */
 function fakeClient(responder) {
   const calls = [];
+  const options = [];
   return {
     calls,
+    options,
     beta: {
       messages: {
-        create: async (params) => {
+        stream: (params, opts) => {
           calls.push(params);
-          return responder(params, calls.length);
+          options.push(opts);
+          return { finalMessage: async () => responder(params, calls.length) };
         },
       },
     },
@@ -123,6 +127,7 @@ test("ArticleGenerator : requête structurée, cache et repli serveur", async ()
   assert.equal(a.content.ar.title, arContent.title);
   assert.equal(a.bodyLanguage, null);
   const params = client.calls[0];
+  assert.ok(client.options[0].signal instanceof AbortSignal, "signal d'abandon global sur la requête diffusée");
   assert.equal(params.model, "claude-opus-5-5");
   assert.equal(params.max_tokens, 8000);
   assert.equal(params.output_config.effort, "medium");

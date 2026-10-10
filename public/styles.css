@@ -12,6 +12,7 @@
 }
 
 * { box-sizing: border-box; }
+button { font-family: inherit; }
 
 html, body { margin: 0; padding: 0; }
 

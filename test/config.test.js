@@ -34,6 +34,11 @@ test("buildConfig : surcharge et validation", () => {
   assert.throws(() => buildConfig({ LANGUAGES: "fr", ARTICLE_LANGUAGE: "en" }), /ARTICLE_LANGUAGE/);
   assert.equal(buildConfig({ LANGUAGES: "ar,en" }).articleLanguage, "ar", "langue principale = première de la liste");
   assert.deepEqual(buildConfig({ LANGUAGES: " en , fr " }).languages, ["en", "fr"]);
+  assert.deepEqual(buildConfig({ LANGUAGES: "fr,fr,en" }).languages, ["fr", "en"], "doublons ignorés");
+  assert.equal(buildConfig({ LANGUAGES: "en,ar", ARTICLE_LANGUAGE: "" }).articleLanguage, "en");
+  assert.equal(buildConfig({}).claude.hardTimeoutMs, 300000);
+  assert.equal(buildConfig({ CLAUDE_HARD_TIMEOUT_MS: "360000" }).claude.hardTimeoutMs, 324000, "borné à 90 % de l'intervalle");
+  assert.equal(buildConfig({ INTERVAL_MINUTES: "0.1" }).claude.hardTimeoutMs, 5400);
   assert.throws(() => buildConfig({ IMAGE_PROVIDER: "dalle" }), /IMAGE_PROVIDER/);
   assert.throws(() => buildConfig({ CLAUDE_EFFORT: "ultra" }), /CLAUDE_EFFORT/);
   assert.throws(() => buildConfig({ CLAUDE_FALLBACKS: "maybe" }), /CLAUDE_FALLBACKS/);

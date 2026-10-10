@@ -218,7 +218,7 @@ function capsule(hue, rng) {
     <polyline points="${pts.join(" ")}" fill="none" stroke="hsl(${(hue + 120) % 360} 90% 70%)" stroke-width="6" stroke-linecap="round" filter="url(#glow)"/>
     ${markers}
     <text x="${x0 + w / 2}" y="${y0 + 36}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7">log [dose]</text>
-    <text x="${x0 - 14}" y="${y0 - h / 2}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7" transform="rotate(-90 ${x0 - 14} ${y0 - h / 2})">réponse</text>
+    <text x="${x0 - 14}" y="${y0 - h / 2}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7" transform="rotate(-90 ${x0 - 14} ${y0 - h / 2})">E</text>
   </g>`;
 }
 
@@ -295,8 +295,8 @@ function trial(hue, rng) {
   ${ticks}
   ${curve(0.05, `hsl(${hue} 85% 68%)`)}
   ${curve(0.1, `hsl(${(hue + 160) % 360} 85% 68%)`)}
-  <text x="${x0 + w / 2}" y="${y0 + 40}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7">temps</text>
-  <text x="${x0 - 16}" y="${y0 - h / 2}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7" transform="rotate(-90 ${x0 - 16} ${y0 - h / 2})">probabilité</text>`;
+  <text x="${x0 + w / 2}" y="${y0 + 40}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7">t</text>
+  <text x="${x0 - 16}" y="${y0 - h / 2}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="20" fill="white" opacity="0.7" transform="rotate(-90 ${x0 - 16} ${y0 - h / 2})">S(t)</text>`;
 }
 
 const THEMES = { peptide, antibody, molecule, capsule, helix, cells, trial };

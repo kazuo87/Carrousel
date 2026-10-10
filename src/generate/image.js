@@ -18,8 +18,8 @@ export class SvgImageProvider {
   }
 
   async generate({ id, record, topic, article }) {
-    const label = topic.label[this.language] ?? topic.id;
-    const svg = renderScientificSvg({ seed: record.pmid, theme: topic.theme, hue: topic.hue, label });
+    // Pas de légende dans l'image : l'interface superpose le libellé du sujet dans la langue affichée.
+    const svg = renderScientificSvg({ seed: record.pmid, theme: topic.theme, hue: topic.hue });
     const file = `${id}.svg`;
     await fsp.writeFile(path.join(this.imagesDir, file), svg, "utf8");
     return { file, url: `/images/${file}`, alt: article.imageAlt, provider: "svg", prompt: null };

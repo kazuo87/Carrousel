@@ -59,24 +59,37 @@
       articleN: (n) => `Article ${n}`,
     },
   };
+  const AR_PLURAL = new Intl.PluralRules("ar");
   STRINGS.ar = {
     title: "الدوّار العلمي",
     subtitle: "الصيدلة · الببتيدات · الأدوية الجديدة · الأدوية الحيوية المماثلة — من PubMed / NCBI",
     footer: "محتوى مُولَّد آليًا من ملخصات PubMed؛ لا يُعدّ نصيحة طبية. المصادر مذكورة في كل بطاقة.",
     read: "اقرأ المقال", source: "المصدر على PubMed", published: "نُشر في", generated: "أُنشئ في",
-    next: "المقال التالي خلال", now: "جارٍ الإنشاء…", articles: (n) => (n === 1 ? "مقال واحد" : n === 2 ? "مقالان" : n <= 10 ? `${n} مقالات` : `${n} مقالًا`),
+    next: "المقال التالي خلال", now: "جارٍ الإنشاء…",
+    articles: (n) => ({ zero: `${n} مقال`, one: "مقال واحد", two: "مقالان", few: `${n} مقالات`, many: `${n} مقالًا`, other: `${n} مقال` })[AR_PLURAL.select(n)],
     newArticle: "مقال جديد", keyPoints: "النقاط الرئيسية", authors: "المؤلفون", journal: "المجلة", pmid: "PMID", doi: "DOI",
     pubTypes: "أنواع المنشور", disclaimer: "مقال مُولَّد آليًا من ملخص PubMed (الملخص فقط، وليس النص الكامل). لا يُعدّ نصيحة طبية.",
     generatedBy: "أُنشئ بواسطة", image: "الرسم التوضيحي", autoplay: "التشغيل التلقائي", of: "من", all: "الكل",
     prev: "المقال السابق", nextBtn: "المقال التالي", close: "إغلاق", slide: "شريحة", chooseArticle: "اختر مقالًا",
     emptyAll: "لا توجد مقالات بعد: سيتم إنشاء أول مقال خلال لحظات.",
     emptyFilter: "لا توجد مقالات لهذا الموضوع بعد.", loadError: "تعذّر تحميل المقالات.",
-    articleN: (n) => `المقال ${n}`, originalText: "النص الأصلي بالإنجليزية", language: "اللغة",
+    articleN: (n) => `المقال ${n}`, originalIn: (name) => `النص الأصلي باللغة ${name}`, language: "اللغة",
+    filterByTopic: "تصفية حسب الموضوع", articlesLandmark: "مقالات علمية",
   };
-  STRINGS.fr.originalText = "Texte original en anglais";
-  STRINGS.en.originalText = "Original text in English";
+  STRINGS.fr.originalIn = (name) => `Texte original en ${name}`;
+  STRINGS.en.originalIn = (name) => `Original text in ${name}`;
   STRINGS.fr.language = "Langue";
   STRINGS.en.language = "Language";
+  STRINGS.fr.filterByTopic = "Filtrer par sujet";
+  STRINGS.en.filterByTopic = "Filter by topic";
+  STRINGS.fr.articlesLandmark = "Articles scientifiques";
+  STRINGS.en.articlesLandmark = "Scientific articles";
+  /* Nom de chaque langue, dans chaque langue d'interface. */
+  const LANG_NAMES_IN = {
+    fr: { fr: "français", en: "anglais", ar: "arabe" },
+    en: { fr: "French", en: "English", ar: "Arabic" },
+    ar: { fr: "الفرنسية", en: "الإنجليزية", ar: "العربية" },
+  };
   const LANG_LABELS = { fr: "FR", en: "EN", ar: "AR" };
   const LANG_NAMES = { fr: "Français", en: "English", ar: "العربية" };
   const LOCALES = { fr: "fr-FR", en: "en-GB", ar: "ar-u-nu-latn" };
@@ -98,20 +111,25 @@
     for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = T[el.dataset.i18n] ?? el.textContent;
     els.prev.setAttribute("aria-label", T.prev);
     els.next.setAttribute("aria-label", T.nextBtn);
-    els.prev.innerHTML = isRtl() ? "&#x203A;" : "&#x2039;";
-    els.next.innerHTML = isRtl() ? "&#x2039;" : "&#x203A;";
+    // Les chevrons ‹ › sont « Bidi_Mirrored » : le navigateur les retourne seul en écriture RTL.
     els.readerClose.setAttribute("aria-label", T.close);
     els.play.setAttribute("aria-label", T.autoplay);
     els.dots.setAttribute("aria-label", T.chooseArticle);
     els.langSwitch.setAttribute("aria-label", T.language);
+    els.filters.setAttribute("aria-label", T.filterByTopic);
+    els.carousel.setAttribute("aria-label", T.articlesLandmark);
     els.carousel.setAttribute("aria-roledescription", lang === "en" ? "carousel" : lang === "ar" ? "دوّار" : "carrousel");
     renderLangSwitch();
   }
 
   function renderLangSwitch() {
-    const available = (state.status && state.status.languages) || [lang];
-    els.langSwitch.innerHTML = available.map((l) =>
-      `<button type="button" data-lang="${esc(l)}" aria-pressed="${l === lang ? "true" : "false"}" lang="${esc(l)}" title="${esc(LANG_NAMES[l] || l)}">${esc(LANG_LABELS[l] || l.toUpperCase())}</button>`).join("");
+    const available = (state.status && Array.isArray(state.status.languages) && state.status.languages.length) ? state.status.languages : [lang];
+    const current = [...els.langSwitch.querySelectorAll("button")].map((b) => b.dataset.lang);
+    if (current.join() !== available.join()) {
+      els.langSwitch.innerHTML = available.map((l) =>
+        `<button type="button" data-lang="${esc(l)}" lang="${esc(l)}" title="${esc(LANG_NAMES[l] || l)}">${esc(LANG_LABELS[l] || l.toUpperCase())}</button>`).join("");
+    }
+    for (const b of els.langSwitch.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.lang === lang));
   }
   els.langSwitch.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-lang]");
@@ -125,11 +143,17 @@
     tickCountdown();
   });
 
-  /* Version de l'article dans la langue affichée (repli : langue principale, puis champs de premier niveau). */
-  function contentOf(article) {
+  /* Version de l'article dans la langue affichée (repli : langue principale, puis première version, puis champs de premier niveau). */
+  function versionOf(article) {
     const c = article.content || {};
-    return c[lang] || c[article.language] || c[Object.keys(c)[0]] || article;
+    const key = [lang, article.language, ...Object.keys(c)].find((k) => k && c[k]);
+    return key ? { key, c: c[key] } : { key: article.language || "fr", c: article };
   }
+  const contentOf = (article) => versionOf(article).c;
+  /* Attributs de langue et de direction pour un texte qui n'est pas dans la langue de l'interface
+     (corps anglais du mode extractif, article ancien sans version traduite) : la ponctuation et
+     l'alignement suivent alors le texte, et les lecteurs d'écran changent de voix. */
+  const textAttrs = (textLang) => (textLang && textLang !== lang ? ` lang="${esc(textLang)}" dir="auto"` : "");
   const topicLabel = (t) => (t && t.labels && t.labels[lang]) || (t && t.label) || "";
   const altOf = (article) => (article.image && ((article.image.alts && article.image.alts[lang]) || article.image.alt)) || "";
   setLang("fr");
@@ -161,12 +185,18 @@
   }
 
   function originalNote(article) {
-    return article.bodyLanguage && article.bodyLanguage !== lang ? `<span class="original">${esc(T.originalText)}</span>` : "";
+    const { key } = versionOf(article);
+    const shown = article.bodyLanguage || key;
+    if (!shown || shown === lang) return "";
+    const name = (LANG_NAMES_IN[lang] || {})[shown] || shown;
+    return `<span class="original">${esc(T.originalIn(name))}</span>`;
   }
 
   function slideHtml(article, i, total) {
     const src = article.source || {};
-    const c = contentOf(article);
+    const { key, c } = versionOf(article);
+    const bodyA = textAttrs(article.bodyLanguage || key); // corps du texte
+    const headA = textAttrs(key); // intitulés traduits
     const isNew = state.newIds.has(article.id);
     const sourceUrl = safeHttpUrl(src.url);
     return `
@@ -183,11 +213,11 @@
             <span>${esc(T.generated)} ${esc(formatDate(article.createdAt))} ${esc(timeFmt.format(new Date(article.createdAt)))}</span>
             ${originalNote(article)}
           </div>
-          <h2>${esc(c.title)}</h2>
-          <p class="dek">${esc(c.dek)}</p>
-          <p class="summary">${esc(c.summary)}</p>
-          ${c.keyPoints && c.keyPoints.length ? `<ul class="keypoints">${c.keyPoints.slice(0, 3).map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
-          <div class="tags">${(c.tags || []).slice(0, 6).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+          <h2${bodyA}>${esc(c.title)}</h2>
+          <p class="dek"${headA}>${esc(c.dek)}</p>
+          <p class="summary"${bodyA}>${esc(c.summary)}</p>
+          ${c.keyPoints && c.keyPoints.length ? `<ul class="keypoints">${c.keyPoints.slice(0, 3).map((k) => `<li${bodyA}>${esc(k)}</li>`).join("")}</ul>` : ""}
+          <div class="tags">${(c.tags || []).slice(0, 6).map((t) => `<span class="tag"${bodyA}>${esc(t)}</span>`).join("")}</div>
           <div class="actions">
             <button class="btn" type="button" data-read="${esc(article.id)}">${esc(T.read)}</button>
             ${sourceUrl ? `<a class="link" href="${esc(sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(T.source)} ↗</a>` : ""}
@@ -295,22 +325,24 @@
   function openReader(article) {
     if (els.reader.open) return;
     const src = article.source || {};
-    const c = contentOf(article);
+    const { key, c } = versionOf(article);
+    const bodyA = textAttrs(article.bodyLanguage || key);
+    const headA = textAttrs(key);
     const authors = (src.authors || []).slice(0, 10).join(", ") + ((src.authors || []).length > 10 ? " et al." : "");
     const sourceUrl = safeHttpUrl(src.url);
     const doiUrl = safeHttpUrl(src.doiUrl || (src.doi ? `https://doi.org/${src.doi}` : ""));
     els.readerContent.innerHTML = `
       <span class="badge badge-inline" data-hue="${hueOf(article)}">${esc(topicLabel(article.topic))}</span>
-      <h2 id="reader-title">${esc(c.title)}</h2>
-      <p class="dek">${esc(c.dek)}</p>
+      <h2 id="reader-title"${bodyA}>${esc(c.title)}</h2>
+      <p class="dek"${headA}>${esc(c.dek)}</p>
       ${originalNote(article) ? `<p class="meta">${originalNote(article)}</p>` : ""}
       ${article.image ? `<img src="${esc(article.image.url)}" alt="${esc(altOf(article))}" width="1200" height="675">` : ""}
-      <p><strong>${esc(c.summary)}</strong></p>
-      ${(c.sections || []).map((s) => `<h3>${esc(s.heading)}</h3><p>${esc(s.content)}</p>`).join("")}
-      ${c.keyPoints && c.keyPoints.length ? `<h3>${esc(T.keyPoints)}</h3><ul>${c.keyPoints.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>` : ""}
-      <div class="tags">${(c.tags || []).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
+      <p${bodyA}><strong>${esc(c.summary)}</strong></p>
+      ${(c.sections || []).map((s) => `<h3${headA}>${esc(s.heading)}</h3><p${bodyA}>${esc(s.content)}</p>`).join("")}
+      ${c.keyPoints && c.keyPoints.length ? `<h3>${esc(T.keyPoints)}</h3><ul>${c.keyPoints.map((k) => `<li${bodyA}>${esc(k)}</li>`).join("")}</ul>` : ""}
+      <div class="tags">${(c.tags || []).map((t) => `<span class="tag"${bodyA}>${esc(t)}</span>`).join("")}</div>
       <div class="source">
-        <div><strong>${esc(src.title || "")}</strong></div>
+        <div lang="en" dir="auto"><strong>${esc(src.title || "")}</strong></div>
         ${authors ? `<div>${esc(T.authors)} : ${esc(authors)}</div>` : ""}
         <div>${esc(T.journal)} : ${esc(src.journal || "")}${src.pubDate ? ` · ${esc(T.published)} ${esc(formatDate(src.pubDate))}` : ""}</div>
         ${src.publicationTypes && src.publicationTypes.length ? `<div>${esc(T.pubTypes)} : ${esc(src.publicationTypes.join(", "))}</div>` : ""}
@@ -462,14 +494,34 @@
     els.statusCount.textContent = T.articles(s.articleCount || state.articles.length);
   }
 
+  /* Au premier statut reçu : langue mémorisée par l'utilisateur si elle est proposée, sinon langue du serveur. */
+  let langFromServer = false;
+  function applyServerLanguage() {
+    const s = state.status;
+    if (langFromServer || !s || !Array.isArray(s.languages) || !s.language) return;
+    langFromServer = true;
+    let remembered = null;
+    try { remembered = localStorage.getItem("carrousel-lang"); } catch { /* stockage indisponible */ }
+    const chosen = remembered && s.languages.includes(remembered) ? remembered : s.language;
+    if (chosen !== lang) {
+      setLang(chosen);
+      if (state.articles.length) { renderFilters(); render(); }
+    } else {
+      renderLangSwitch();
+    }
+    updateStatus({});
+  }
+
   async function refreshStatus() {
     try {
       const status = await fetchJson("/api/status");
       if (status.now) state.clockOffset = Date.now() - new Date(status.now).getTime();
       updateStatus(status);
+      applyServerLanguage();
       tickCountdown();
     } catch (err) {
       console.warn("statut indisponible", err);
+      renderLangSwitch();
     }
   }
 
@@ -486,13 +538,7 @@
   }
 
   async function init() {
-    await refreshStatus();
-    let remembered = null;
-    try { remembered = localStorage.getItem("carrousel-lang"); } catch { /* stockage indisponible */ }
-    const available = (state.status && state.status.languages) || [];
-    if (remembered && available.includes(remembered)) setLang(remembered);
-    else if (state.status && state.status.language) setLang(state.status.language);
-    else renderLangSwitch();
+    await refreshStatus(); // applique la langue (mémorisée ou du serveur) dès que le statut est connu
     try {
       await loadAll();
     } catch (err) {

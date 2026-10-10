@@ -173,9 +173,15 @@ export class ArticleGenerator {
       params.fallbacks = "default";
     }
 
+    // Diffusion en continu : le délai du client ne borne que l'attente du premier octet (trois
+    // versions représentent plusieurs milliers de jetons de sortie) ; le signal borne la requête entière.
+    const request = () =>
+      this.client.beta.messages
+        .stream(params, { signal: AbortSignal.timeout(this.config.hardTimeoutMs ?? 300000) })
+        .finalMessage();
     let response;
     try {
-      response = await this.client.beta.messages.create(params);
+      response = await request();
     } catch (err) {
       // Si la bêta de repli n'est pas acceptée (proxy, plateforme tierce…), on retente sans elle
       // une seule fois, puis on s'en souvient pour ne pas payer deux requêtes à chaque tour.
@@ -184,7 +190,7 @@ export class ArticleGenerator {
         delete params.betas;
         delete params.fallbacks;
         this.config.fallbacks = "off";
-        response = await this.client.beta.messages.create(params);
+        response = await request();
       } else {
         throw err;
       }

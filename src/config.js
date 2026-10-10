@@ -75,7 +75,7 @@ export function buildConfig(env = process.env) {
       adminToken: str("ADMIN_TOKEN", ""),
 
       // Contenu : langues générées (la première est la langue principale / par défaut de l'interface)
-      languages: list("LANGUAGES", ["fr", "en", "ar"]),
+      languages: [...new Set(list("LANGUAGES", ["fr", "en", "ar"]))],
       articleLanguage: str("ARTICLE_LANGUAGE", ""),
       topics: list("TOPICS", []), // vide = tous les sujets
       maxArticles: num("MAX_ARTICLES", 500),
@@ -103,9 +103,12 @@ export function buildConfig(env = process.env) {
         // Le raisonnement adaptatif consomme aussi des jetons de sortie : laisser de la marge.
         maxTokens: num("CLAUDE_MAX_TOKENS", 16000),
         fallbacks: str("CLAUDE_FALLBACKS", "default"), // "default" | "off"
-        // délai × (tentatives + 1) doit rester inférieur à l'intervalle de génération.
+        // La réponse est diffusée en continu : timeoutMs borne l'attente du premier octet (et chaque
+        // nouvelle tentative), hardTimeoutMs borne la requête entière. Le total doit rester inférieur
+        // à l'intervalle de génération.
         timeoutMs: num("CLAUDE_TIMEOUT_MS", 120000),
         maxRetries: num("CLAUDE_MAX_RETRIES", 1),
+        hardTimeoutMs: num("CLAUDE_HARD_TIMEOUT_MS", 300000),
       },
 
       // Génération d'image
@@ -134,6 +137,9 @@ export function buildConfig(env = process.env) {
       throw new Error("CLAUDE_EFFORT doit valoir low, medium, high, xhigh ou max");
     }
     if (!["default", "off"].includes(cfg.claude.fallbacks)) throw new Error("CLAUDE_FALLBACKS doit valoir default ou off");
+    // La requête Claude ne doit jamais dépasser l'intervalle de génération : on la borne à 90 % de celui-ci.
+    const intervalMs = cfg.intervalMinutes * 60_000;
+    if (cfg.claude.hardTimeoutMs >= intervalMs) cfg.claude.hardTimeoutMs = Math.max(5_000, Math.floor(intervalMs * 0.9));
     if (cfg.pubmed.windowsDays.some((d) => !(d > 0))) throw new Error("PUBMED_WINDOWS_DAYS doit contenir des nombres de jours positifs");
     return cfg;
   } finally {
