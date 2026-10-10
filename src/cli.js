@@ -3,8 +3,9 @@
  *   node src/cli.js once   → génère un seul article (sans serveur) et affiche le résultat
  *   node src/cli.js serve  → sert le carrousel sans génération automatique
  */
-import { createApp, listen, installShutdown } from "./app.js";
+import { createApp, listen, installShutdown, installProcessGuards } from "./app.js";
 
+installProcessGuards();
 const command = process.argv[2] ?? "once";
 
 if (command === "once") {

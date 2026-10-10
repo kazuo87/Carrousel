@@ -14,7 +14,16 @@ const MONTHS = {
   jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
 };
 
+const MAX_RETRY_AFTER_S = 30;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Formate une date au format attendu par E-utilities (AAAA/MM/JJ). */
+export function eutilsDate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}/${pad(d.getUTCMonth() + 1)}/${pad(d.getUTCDate())}`;
+}
 
 export class PubMedClient {
   /**
@@ -64,8 +73,10 @@ export class PubMedClient {
         });
         if (res.status === 429 || res.status >= 500) {
           lastError = new Error(`NCBI ${endpoint} a répondu ${res.status}`);
-          const retryAfter = Number(res.headers.get("retry-after")) || 0;
-          await sleep(Math.max(retryAfter * 1000, 1000 * 2 ** (attempt - 1)));
+          if (attempt < attempts) {
+            const retryAfter = Math.min(Number(res.headers.get("retry-after")) || 0, MAX_RETRY_AFTER_S);
+            await sleep(Math.max(retryAfter * 1000, 1000 * 2 ** (attempt - 1)));
+          }
           continue;
         }
         if (!res.ok) throw new Error(`NCBI ${endpoint} a répondu ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -86,16 +97,21 @@ export class PubMedClient {
   }
 
   /**
-   * Recherche des PMID. `reldate` limite aux N derniers jours (date d'entrée dans PubMed),
-   * ce qui favorise les articles réellement nouveaux. Tri par défaut PubMed = plus récents.
+   * Recherche des PMID. La fenêtre de dates porte par défaut sur la date d'entrée dans PubMed
+   * (`datetype=edat`), ce qui favorise les notices réellement nouvelles. Soit `reldate` (N derniers
+   * jours), soit `mindate`/`maxdate` (AAAA/MM/JJ). `retstart` permet de paginer. Tri par défaut
+   * PubMed = plus récents d'abord.
    */
-  async search(term, { retmax = 40, reldate = 14, datetype = "edat", sort } = {}) {
+  async search(term, { retmax = 40, retstart = 0, reldate, mindate, maxdate, datetype = "edat", sort } = {}) {
     const text = await this.request("esearch.fcgi", {
       term,
       retmax,
+      retstart: retstart || undefined,
       retmode: "json",
-      datetype,
+      datetype: reldate || mindate || maxdate ? datetype : undefined,
       reldate,
+      mindate,
+      maxdate,
       sort,
     });
     let json;
@@ -108,7 +124,8 @@ export class PubMedClient {
     if (!result) throw new Error(`esearch : réponse inattendue ${text.slice(0, 200)}`);
     if (result.ERROR) throw new Error(`esearch : ${result.ERROR}`);
     const ids = Array.isArray(result.idlist) ? result.idlist.map(String) : [];
-    log.debug(`esearch "${term.slice(0, 60)}…" (reldate=${reldate}) → ${ids.length} id(s) sur ${result.count}`);
+    const window = reldate ? `reldate=${reldate}` : `${mindate ?? "…"}→${maxdate ?? "…"}`;
+    log.debug(`esearch "${term.slice(0, 60)}…" (${window}, retstart=${retstart}) → ${ids.length} id(s) sur ${result.count}`);
     return { ids, count: Number(result.count) || 0, queryTranslation: result.querytranslation };
   }
 
@@ -132,9 +149,9 @@ const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   textNodeName: "#text",
-  // Les titres et résumés peuvent contenir du balisage (<i>, <sup>…) : on garde le XML brut
-  // de ces nœuds puis on retire les balises nous-mêmes.
-  stopNodes: ["*.ArticleTitle", "*.AbstractText", "*.CopyrightInformation"],
+  // Les titres, résumés et mots-clés peuvent contenir du balisage (<i>, <sup>…) : on garde le XML
+  // brut de ces nœuds puis on retire les balises nous-mêmes.
+  stopNodes: ["*.ArticleTitle", "*.AbstractText", "*.CopyrightInformation", "*.Keyword"],
   isArray: (name) =>
     ["PubmedArticle", "AbstractText", "Author", "ArticleId", "PublicationType", "MeshHeading", "Keyword", "KeywordList", "PubMedPubDate", "ELocationID"].includes(name),
   processEntities: true,
@@ -193,7 +210,11 @@ export function parseDate(node) {
 function parseAbstract(abstractNode) {
   const parts = asArray(abstractNode?.AbstractText);
   const sections = parts
-    .map((p) => ({ label: attrOf(p, "Label") ?? attrOf(p, "NlmCategory") ?? "", text: stripTags(p) }))
+    .map((p) => {
+      let label = attrOf(p, "Label") ?? attrOf(p, "NlmCategory") ?? "";
+      if (/^unlabel+ed$/i.test(label)) label = "";
+      return { label, text: stripTags(p) };
+    })
     .filter((s) => s.text);
   const text = sections.map((s) => (s.label ? `${s.label}: ${s.text}` : s.text)).join("\n");
   return { text, sections };

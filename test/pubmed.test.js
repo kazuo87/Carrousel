@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PubMedClient, parsePubmedXml, parseDate, stripTags } from "../src/pubmed.js";
+import { PubMedClient, parsePubmedXml, parseDate, stripTags, eutilsDate } from "../src/pubmed.js";
 import { FIXTURE_XML, records, recordByPmid } from "./helpers.js";
 
 test("parsePubmedXml : notices complètes, livres ignorés", () => {
@@ -48,6 +48,17 @@ test("parsePubmedXml : balisage, entités, auteur collectif, MedlineDate", () =>
   assert.deepEqual(trial.authors, ["Lucía Fernández", "KRASCEND-3 Investigators"]);
   assert.equal(trial.pubDate, "2026-09-25");
   assert.deepEqual(trial.abstractSections.map((s) => s.label), ["Background", "Methods", "Results", "Conclusions"]);
+});
+
+test("parsePubmedXml : mots-clés balisés et label UNLABELLED", () => {
+  const xml = `<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID Version="1">1</PMID><Article>
+    <ArticleTitle>T</ArticleTitle><Abstract><AbstractText Label="UNLABELLED">Plain text.</AbstractText></Abstract></Article>
+    <KeywordList Owner="NOTNLM"><Keyword MajorTopicYN="N"><i>Escherichia coli</i> O157</Keyword><Keyword MajorTopicYN="Y">plain</Keyword></KeywordList>
+    </MedlineCitation></PubmedArticle></PubmedArticleSet>`;
+  const [r] = parsePubmedXml(xml);
+  assert.deepEqual(r.keywords, ["Escherichia coli O157", "plain"]);
+  assert.equal(r.abstract, "Plain text.");
+  assert.equal(r.abstractSections[0].label, "");
 });
 
 test("parsePubmedXml : XML vide ou invalide", () => {
@@ -98,7 +109,23 @@ test("PubMedClient.search : paramètres E-utilities et identification", async ()
   assert.equal(url.searchParams.get("email"), "me@example.org");
   assert.equal(url.searchParams.get("tool"), "mytool");
   assert.equal(url.searchParams.has("sort"), false);
+  assert.equal(url.searchParams.has("retstart"), false);
   assert.ok(calls[0].init.signal instanceof AbortSignal);
+
+  client.minGapMs = 0;
+  await client.search("x", { retmax: 40, retstart: 80, mindate: "2026/09/01", maxdate: "2026/10/01" });
+  const paged = calls[1].url.searchParams;
+  assert.equal(paged.get("retstart"), "80");
+  assert.equal(paged.get("mindate"), "2026/09/01");
+  assert.equal(paged.get("maxdate"), "2026/10/01");
+  assert.equal(paged.get("datetype"), "edat");
+  assert.equal(paged.has("reldate"), false);
+  await client.search("x", {});
+  assert.equal(calls[2].url.searchParams.has("datetype"), false, "pas de datetype sans fenêtre de dates");
+});
+
+test("eutilsDate : format AAAA/MM/JJ", () => {
+  assert.equal(eutilsDate(new Date("2026-03-05T23:30:00Z")), "2026/03/05");
 });
 
 test("PubMedClient.search : erreur renvoyée par NCBI", async () => {
@@ -119,11 +146,20 @@ test("PubMedClient : nouvelle tentative après 429 puis succès", async () => {
   assert.equal(recs.length, 4);
 });
 
-test("PubMedClient : échec définitif après 3 erreurs serveur", async () => {
+test("PubMedClient : échec définitif après 3 erreurs serveur, sans attente finale, Retry-After plafonné", async () => {
   const { impl, calls } = fakeFetch(() => jsonResponse("down", 503, { "retry-after": "0" }));
   const client = new PubMedClient({ baseUrl: "https://example.test", fetchImpl: impl });
+  const t0 = Date.now();
   await assert.rejects(client.search("x"), /503/);
   assert.equal(calls.length, 3);
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed >= 2500 && elapsed < 6000, `attentes 1 s + 2 s seulement (mesuré ${elapsed} ms)`);
+
+  const slow = fakeFetch((url, n) => (n === 1 ? jsonResponse("busy", 429, { "retry-after": "3600" }) : jsonResponse({ esearchresult: { count: "0", idlist: [] } })));
+  const client2 = new PubMedClient({ baseUrl: "https://example.test", fetchImpl: slow.impl });
+  const t1 = Date.now();
+  await client2.search("x");
+  assert.ok(Date.now() - t1 < 31000, "Retry-After de 3600 s plafonné à 30 s");
 });
 
 test("PubMedClient : erreur réseau convertie en message lisible", async () => {

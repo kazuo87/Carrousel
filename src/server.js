@@ -6,6 +6,7 @@ import http from "node:http";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { timingSafeEqual } from "node:crypto";
 import { ROOT_DIR } from "./config.js";
 import { createLogger } from "./logger.js";
@@ -35,24 +36,45 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
-async function sendFile(res, file, { cache = "no-cache", extraHeaders = {} } = {}) {
-  let stat;
+/**
+ * Envoie un fichier. Le fichier est ouvert avant l'envoi des en-têtes (un fichier disparu ou
+ * illisible donne un 404 propre) et diffusé via stream.pipeline, qui ferme le descripteur si le
+ * client abandonne le téléchargement et transforme les erreurs de lecture en rejet géré.
+ * @returns {Promise<boolean>} false si le fichier n'existe pas.
+ */
+async function sendFile(res, file, { cache = "no-cache", extraHeaders = {}, head = false } = {}) {
+  let handle;
   try {
-    stat = await fsp.stat(file);
+    handle = await fsp.open(file, "r");
   } catch {
     return false;
   }
-  if (!stat.isFile()) return false;
-  const ext = path.extname(file).toLowerCase();
-  res.writeHead(200, {
-    "Content-Type": MIME[ext] ?? "application/octet-stream",
-    "Content-Length": stat.size,
-    "Cache-Control": cache,
-    "X-Content-Type-Options": "nosniff",
-    ...extraHeaders,
-  });
-  fs.createReadStream(file).pipe(res);
-  return true;
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) return false;
+    const ext = path.extname(file).toLowerCase();
+    res.writeHead(200, {
+      "Content-Type": MIME[ext] ?? "application/octet-stream",
+      "Content-Length": stat.size,
+      "Cache-Control": cache,
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders,
+    });
+    if (head) {
+      res.end();
+      return true;
+    }
+    const stream = handle.createReadStream({ autoClose: true });
+    handle = null; // le flux possède désormais le descripteur
+    try {
+      await pipeline(stream, res);
+    } catch (err) {
+      if (err.code !== "ERR_STREAM_PREMATURE_CLOSE") log.warn(`Envoi de ${path.basename(file)} interrompu : ${err.message}`);
+    }
+    return true;
+  } finally {
+    if (handle) await handle.close().catch(() => {});
+  }
 }
 
 function tokenMatches(provided, expected) {
@@ -62,9 +84,34 @@ function tokenMatches(provided, expected) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function isLoopback(req) {
+const PROXY_HEADERS = ["x-forwarded-for", "forwarded", "x-real-ip"];
+
+/**
+ * Connexion locale directe : adresse de boucle locale, sans en-tête de relais (derrière un reverse
+ * proxy local, le client réel est inconnu) et sans origine navigateur étrangère (anti-CSRF).
+ */
+function isTrustedLoopback(req) {
   const addr = req.socket.remoteAddress ?? "";
-  return addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1";
+  if (!(addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1")) return false;
+  if (PROXY_HEADERS.some((h) => req.headers[h] !== undefined)) return false;
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.headers.host) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Message d'erreur présentable : sans chemin absolu ni corps de réponse amont, tronqué. */
+export function publicErrorMessage(message) {
+  if (!message) return null;
+  return String(message)
+    .replace(/\/(?:[\w.@-]+\/)+[\w.@-]*/g, "…")
+    .replace(/\s+/g, " ")
+    .slice(0, 200);
 }
 
 /**
@@ -90,16 +137,22 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
   heartbeat.unref();
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url, "http://localhost");
-    const { pathname } = url;
+    let url;
     try {
-      if (req.method === "GET" || req.method === "HEAD") {
+      url = new URL(req.url, "http://localhost");
+    } catch {
+      return sendJson(res, 400, { error: "URL invalide" });
+    }
+    const { pathname } = url;
+    const head = req.method === "HEAD";
+    try {
+      if (req.method === "GET" || head) {
         if (pathname === "/" || pathname === "/index.html") {
           res.setHeader(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'self'",
           );
-          if (await sendFile(res, path.join(PUBLIC_DIR, "index.html"))) return;
+          if (await sendFile(res, path.join(PUBLIC_DIR, "index.html"), { head })) return;
         }
         if (pathname === "/healthz") return sendJson(res, 200, { ok: true });
 
@@ -135,10 +188,14 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
               runs: store.state.runs,
               lastRunAt: store.state.lastRunAt,
               lastSuccessAt: store.state.lastSuccessAt,
-              lastError: store.state.lastError,
-              lastResult: store.state.lastResult ?? null,
+              lastError: store.state.lastError
+                ? { at: store.state.lastError.at, topic: store.state.lastError.topic ?? null, message: publicErrorMessage(store.state.lastError.message) }
+                : null,
+              lastResult: store.state.lastResult?.status === "error"
+                ? { status: "error", message: publicErrorMessage(store.state.lastResult.message) }
+                : store.state.lastResult ?? null,
             },
-            generators: meta,
+            generators: { ...meta, article: publicErrorMessage(meta.article) },
           });
         }
         if (pathname === "/api/events") {
@@ -155,10 +212,16 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
         }
         const imageMatch = pathname.match(/^\/images\/([^/]+)$/);
         if (imageMatch) {
-          const name = decodeURIComponent(imageMatch[1]);
+          let name;
+          try {
+            name = decodeURIComponent(imageMatch[1]);
+          } catch {
+            return sendJson(res, 400, { error: "nom de fichier invalide" });
+          }
           if (!SAFE_FILE.test(name)) return sendJson(res, 400, { error: "nom de fichier invalide" });
           const file = path.join(config.imagesDir, name);
           if (await sendFile(res, file, {
+            head,
             cache: "public, max-age=86400, immutable",
             extraHeaders: { "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'" },
           })) return;
@@ -168,7 +231,7 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
         const rel = pathname.replace(/^\/+/, "");
         if (SAFE_FILE.test(rel)) {
           const file = path.join(PUBLIC_DIR, rel);
-          if (file.startsWith(PUBLIC_DIR + path.sep) && (await sendFile(res, file))) return;
+          if (file.startsWith(PUBLIC_DIR + path.sep) && (await sendFile(res, file, { head }))) return;
         }
         return sendJson(res, 404, { error: "introuvable" });
       }
@@ -176,11 +239,12 @@ export function createServer({ config, store, scheduler, runNow, topics, meta })
       if (req.method === "POST" && pathname === "/api/run") {
         const header = req.headers.authorization ?? "";
         const provided = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-        const allowed = config.adminToken ? tokenMatches(provided, config.adminToken) : isLoopback(req);
+        const allowed = config.adminToken ? tokenMatches(provided, config.adminToken) : isTrustedLoopback(req);
         if (!allowed) return sendJson(res, 401, { error: "non autorisé (ADMIN_TOKEN requis)" });
         if (!runNow) return sendJson(res, 503, { error: "génération désactivée sur ce serveur" });
         const result = await runNow();
-        if (result?.status === "error") return sendJson(res, 500, { status: "error", message: result.error?.message });
+        if (result?.status === "busy") return sendJson(res, 409, { status: "busy", error: "un tour est déjà en cours" });
+        if (result?.status === "error") return sendJson(res, 500, { status: "error", message: publicErrorMessage(result.error?.message) });
         return sendJson(res, 200, {
           status: result?.status ?? "done",
           reason: result?.reason,

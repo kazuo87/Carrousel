@@ -26,21 +26,27 @@ export async function createApp({ withScheduler = true } = {}) {
     ? new Scheduler({ intervalMs: config.intervalMinutes * 60_000, task: () => pipeline.runOnce(), runOnStart: config.runOnStart })
     : null;
   const meta = {
-    article: articleGenerator.usesClaude ? `claude:${config.claude.model}` : `extractive (${articleGenerator.disabledReason})`,
+    get article() {
+      return articleGenerator.usesClaude ? `claude:${config.claude.model}` : `extractive (${articleGenerator.disabledReason})`;
+    },
     image: config.image.provider === "openai" ? `openai:${config.image.openaiModel}` : "svg",
     pubmed: config.pubmed.baseUrl,
     topics: topics.map((t) => t.id),
   };
-  const server = createServer({
-    config,
-    store,
-    scheduler,
-    runNow: () => (scheduler ? scheduler.tick() : pipeline.runOnce()),
-    topics,
-    meta,
-  });
+  // Sans planificateur (mode « serve »), les déclenchements manuels ne doivent pas se chevaucher.
+  let manualRun = null;
+  const runNow = () => {
+    if (scheduler) return scheduler.tick();
+    if (manualRun) return Promise.resolve({ status: "busy" });
+    manualRun = pipeline.runOnce().finally(() => { manualRun = null; });
+    return manualRun;
+  };
+  const server = createServer({ config, store, scheduler, runNow, topics, meta });
   log.info(`Générateur d'articles : ${meta.article} · images : ${meta.image} · sujets : ${meta.topics.join(", ")}`);
   if (!config.pubmed.email) log.warn("NCBI_EMAIL non défini : recommandé par NCBI pour identifier l'outil");
+  if (!config.adminToken && !["127.0.0.1", "localhost", "::1"].includes(config.host)) {
+    log.warn("ADMIN_TOKEN non défini : POST /api/run n'est accepté que depuis une connexion locale directe");
+  }
   return { config, topics, store, pubmed, articleGenerator, imageProvider, pipeline, scheduler, server, meta };
 }
 
@@ -52,6 +58,17 @@ export function listen(app) {
       log.info(`Carrousel disponible sur http://${config.host === "0.0.0.0" ? "localhost" : config.host}:${config.port}/`);
       resolve(server);
     });
+  });
+}
+
+/** Journalise les erreurs non rattrapées : une promesse oubliée ne doit pas tuer le bot en silence. */
+export function installProcessGuards() {
+  process.on("unhandledRejection", (reason) => {
+    log.error(`Promesse rejetée sans gestionnaire : ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`);
+  });
+  process.on("uncaughtException", (err) => {
+    log.error(`Exception non rattrapée, arrêt du processus : ${err.stack ?? err.message}`);
+    process.exit(1);
   });
 }
 

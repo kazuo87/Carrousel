@@ -28,6 +28,10 @@ test("buildConfig : surcharge et validation", () => {
   assert.throws(() => buildConfig({ ARTICLE_LANGUAGE: "de" }), /ARTICLE_LANGUAGE/);
   assert.throws(() => buildConfig({ IMAGE_PROVIDER: "dalle" }), /IMAGE_PROVIDER/);
   assert.throws(() => buildConfig({ CLAUDE_EFFORT: "ultra" }), /CLAUDE_EFFORT/);
+  assert.throws(() => buildConfig({ CLAUDE_FALLBACKS: "maybe" }), /CLAUDE_FALLBACKS/);
+  assert.throws(() => buildConfig({ PUBMED_WINDOWS_DAYS: "14,-1" }), /PUBMED_WINDOWS_DAYS/);
+  assert.equal(buildConfig({}).claude.maxTokens, 16000);
+  assert.equal(buildConfig({}).claude.maxRetries, 1);
 });
 
 test("topics : sélection et requêtes", () => {
@@ -40,5 +44,7 @@ test("topics : sélection et requêtes", () => {
   assert.match(q, /NOT \(comment\[pt\]/);
   for (const t of TOPICS) {
     assert.ok(t.id && t.label.fr && t.label.en && t.query && t.keywords.length && t.theme && typeof t.hue === "number");
+    assert.ok(!t.keywords.includes("mic"), "« mic » est un préfixe de mice/microbiome : trop ambigu");
   }
+  assert.match(getTopics(["essais-cliniques"])[0].query, /"randomized"\[tiab\]/);
 });

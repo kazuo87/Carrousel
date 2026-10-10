@@ -51,19 +51,29 @@ test("ArticleSchema accepte un article complet", () => {
   assert.equal(ArticleSchema.safeParse({ ...validArticle, sections: [] }).success, false);
 });
 
-test("ArticleGenerator : sans identifiants → extractif", async () => {
-  const saved = { key: process.env.ANTHROPIC_API_KEY, token: process.env.ANTHROPIC_AUTH_TOKEN };
+test("ArticleGenerator : sans identifiants → extractif, Claude désactivé à la première requête", async () => {
+  const saved = { key: process.env.ANTHROPIC_API_KEY, token: process.env.ANTHROPIC_AUTH_TOKEN, home: process.env.HOME };
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.ANTHROPIC_AUTH_TOKEN;
+  process.env.HOME = "/nonexistent-home-for-tests"; // aucun profil `ant auth login`
   try {
     const gen = new ArticleGenerator({ claude, language: "fr" });
-    assert.equal(gen.usesClaude, false);
+    assert.equal(gen.usesClaude, true, "le SDK résout les identifiants à la première requête");
     const a = await gen.generate(recordByPmid("40000001"), topic);
     assert.equal(a.generator, "extractive");
+    assert.equal(gen.usesClaude, false);
+    assert.match(gen.disabledReason, /identifiants/);
   } finally {
     if (saved.key) process.env.ANTHROPIC_API_KEY = saved.key;
     if (saved.token) process.env.ANTHROPIC_AUTH_TOKEN = saved.token;
+    process.env.HOME = saved.home;
   }
+});
+
+test("ArticleGenerator : CLAUDE_ENABLED=false → extractif sans client", async () => {
+  const gen = new ArticleGenerator({ claude: { ...claude, enabled: false }, language: "fr" });
+  assert.equal(gen.usesClaude, false);
+  assert.equal((await gen.generate(recordByPmid("40000001"), topic)).generator, "extractive");
 });
 
 test("ArticleGenerator : requête structurée, cache et repli serveur", async () => {
@@ -78,8 +88,7 @@ test("ArticleGenerator : requête structurée, cache et repli serveur", async ()
   assert.equal(params.output_config.effort, "medium");
   assert.equal(params.output_config.format.type, "json_schema");
   assert.equal(params.output_config.format.schema.required.includes("imagePrompt"), true);
-  assert.deepEqual(params.system[0].cache_control, { type: "ephemeral" });
-  assert.match(params.system[0].text, /journaliste scientifique/);
+  assert.match(params.system, /journaliste scientifique/);
   assert.deepEqual(params.betas, ["server-side-fallback-2026-07-01"]);
   assert.equal(params.fallbacks, "default");
   assert.equal(params.thinking, undefined, "pas de paramètre thinking explicite");
@@ -93,12 +102,12 @@ test("ArticleGenerator : CLAUDE_FALLBACKS=off → pas de bêta", async () => {
   await gen.generate(recordByPmid("40000001"), topic);
   assert.equal(client.calls[0].betas, undefined);
   assert.equal(client.calls[0].fallbacks, undefined);
-  assert.match(client.calls[0].system[0].text, /science journalist/);
+  assert.match(client.calls[0].system, /science journalist/);
 });
 
-test("ArticleGenerator : bêta refusée (400) → nouvelle tentative sans fallbacks", async () => {
+test("ArticleGenerator : bêta refusée (400) → nouvelle tentative sans fallbacks, mémorisée", async () => {
   const client = fakeClient((params, n) => {
-    if (n === 1) throw new Anthropic.BadRequestError(400, { error: { message: "unknown beta" } }, "unknown beta", new Headers());
+    if (n === 1) throw new Anthropic.BadRequestError(400, { error: { message: "unknown beta: server-side-fallback" } }, "unknown beta: server-side-fallback", new Headers());
     return textResponse(validArticle);
   });
   const gen = new ArticleGenerator({ claude, language: "fr", client });
@@ -106,6 +115,29 @@ test("ArticleGenerator : bêta refusée (400) → nouvelle tentative sans fallba
   assert.equal(a.generator, "claude:claude-opus-5-5");
   assert.equal(client.calls.length, 2);
   assert.equal(client.calls[1].fallbacks, undefined);
+  await gen.generate(recordByPmid("40000002"), topic);
+  assert.equal(client.calls.length, 3, "une seule requête au tour suivant");
+  assert.equal(client.calls[2].fallbacks, undefined);
+  assert.equal(claude.fallbacks, "default", "la configuration partagée n'est pas modifiée");
+});
+
+test("ArticleGenerator : un 400 sans rapport avec la bêta n'est pas rejoué", async () => {
+  const client = fakeClient(() => { throw new Anthropic.BadRequestError(400, { error: { message: "max_tokens too large" } }, "max_tokens too large", new Headers()); });
+  const gen = new ArticleGenerator({ claude, language: "fr", client });
+  const a = await gen.generate(recordByPmid("40000001"), topic);
+  assert.equal(a.generator, "extractive");
+  assert.equal(client.calls.length, 1);
+});
+
+test("ArticleGenerator : bloc fallback avant le texte (requête rejouée côté serveur)", async () => {
+  const client = fakeClient(() => ({
+    ...textResponse(validArticle),
+    model: "claude-opus-4-8",
+    content: [{ type: "fallback", from: { model: "claude-opus-5-5" }, to: { model: "claude-opus-4-8" } }, { type: "text", text: JSON.stringify(validArticle) }],
+  }));
+  const gen = new ArticleGenerator({ claude, language: "fr", client });
+  const a = await gen.generate(recordByPmid("40000001"), topic);
+  assert.equal(a.generator, "claude:claude-opus-4-8");
 });
 
 test("ArticleGenerator : refus, troncature, JSON invalide, hors schéma → extractif", async () => {
@@ -130,7 +162,7 @@ test("ArticleGenerator : erreur d'authentification → Claude désactivé durabl
   const a = await gen.generate(recordByPmid("40000001"), topic);
   assert.equal(a.generator, "extractive");
   assert.equal(gen.usesClaude, false);
-  assert.match(gen.disabledReason, /authentification/);
+  assert.match(gen.disabledReason, /identifiants/);
   await gen.generate(recordByPmid("40000002"), topic);
   assert.equal(client.calls.length, 1, "plus aucun appel après désactivation");
 });
@@ -149,4 +181,5 @@ test("classifyError", () => {
   assert.equal(classifyError(new Anthropic.APIConnectionError({ message: "net" })), "network");
   assert.equal(classifyError(new Anthropic.BadRequestError(400, {}, "x", new Headers())), "api");
   assert.equal(classifyError(new Error("boom")), "unknown");
+  assert.equal(classifyError(new Error("Could not resolve authentication method. Expected one of apiKey, authToken…")), "auth");
 });

@@ -30,7 +30,7 @@ export const ARTICLES = splitArticles(FIXTURE);
 export function idsForTerm(term) {
   const t = term.toLowerCase();
   if (t.includes("biosimilar")) return ["40000001", "40000003"];
-  if (t.includes("peptide")) return ["40000002"];
+  if (t.includes("peptide")) return ["40000002", "40000099"]; // 40000099 : identifiant sans notice PubmedArticle
   if (t.includes("first-in-class") || t.includes("new drug")) return ["40000004"];
   if (t.includes("randomized controlled trial")) return ["40000004", "40000001"];
   return [];

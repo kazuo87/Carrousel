@@ -1,4 +1,8 @@
-/** Planificateur : exécute une tâche à intervalle fixe, sans chevauchement. */
+/**
+ * Planificateur : exécute une tâche sur une grille de temps fixe (toutes les N minutes, quelle que
+ * soit la durée du tour), sans chevauchement. Un créneau manqué par un tour trop long est sauté,
+ * pas rattrapé.
+ */
 import { createLogger } from "./logger.js";
 
 const log = createLogger("scheduler");
@@ -16,36 +20,48 @@ export class Scheduler {
     this.task = task;
     this.runOnStart = runOnStart;
     this.timer = null;
+    this.generation = 0;
+    this.anchorAt = null;
     this.running = false;
+    this.current = null;
     this.lastRunAt = null;
     this.lastFinishedAt = null;
     this.nextRunAt = null;
     this.lastResult = null;
     this.runs = 0;
     this.skippedOverlaps = 0;
-    this.current = null;
+    this.skippedSlots = 0;
   }
 
   start() {
     if (this.timer) return;
-    const schedule = () => {
-      this.nextRunAt = Date.now() + this.intervalMs;
+    const generation = ++this.generation;
+    const now = Date.now();
+    this.anchorAt = now;
+    const arm = (at) => {
+      this.nextRunAt = at;
       this.timer = setTimeout(async () => {
+        if (generation !== this.generation) return;
         await this.tick();
-        if (this.timer) schedule();
-      }, this.intervalMs);
+        if (generation === this.generation && this.timer) arm(this.nextSlot());
+      }, Math.max(0, at - Date.now()));
     };
-    if (this.runOnStart) {
-      // Premier tour immédiat, puis cadence régulière.
-      this.nextRunAt = Date.now();
-      this.timer = setTimeout(async () => {
-        await this.tick();
-        if (this.timer) schedule();
-      }, 0);
-    } else {
-      schedule();
-    }
+    // Premier tour immédiat (optionnel), puis cadence régulière ancrée sur l'heure de démarrage.
+    arm(this.runOnStart ? now : now + this.intervalMs);
     log.info(`Planificateur démarré : un article toutes les ${Math.round(this.intervalMs / 60000 * 10) / 10} minute(s)`);
+  }
+
+  /** Prochain créneau de la grille strictement dans le futur. */
+  nextSlot() {
+    const now = Date.now();
+    const elapsed = Math.max(0, now - this.anchorAt);
+    const k = Math.floor(elapsed / this.intervalMs) + 1;
+    const missed = k - 1 - Math.floor(Math.max(0, (this.nextRunAt ?? now) - this.anchorAt) / this.intervalMs);
+    if (missed > 0) {
+      this.skippedSlots += missed;
+      log.warn(`${missed} créneau(x) sauté(s) : le tour précédent a duré plus que l'intervalle`);
+    }
+    return this.anchorAt + k * this.intervalMs;
   }
 
   /** Arrête la cadence ; la promesse renvoyée se résout quand le tour en cours (s'il y en a un) est terminé. */
@@ -53,6 +69,7 @@ export class Scheduler {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.nextRunAt = null;
+    this.generation += 1;
     return this.current ?? Promise.resolve();
   }
 
@@ -90,6 +107,7 @@ export class Scheduler {
       intervalMs: this.intervalMs,
       runs: this.runs,
       skippedOverlaps: this.skippedOverlaps,
+      skippedSlots: this.skippedSlots,
       lastRunAt: this.lastRunAt ? new Date(this.lastRunAt).toISOString() : null,
       lastFinishedAt: this.lastFinishedAt ? new Date(this.lastFinishedAt).toISOString() : null,
       nextRunAt: this.nextRunAt ? new Date(this.nextRunAt).toISOString() : null,

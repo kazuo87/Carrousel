@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scoreRecord, isNovel, rankCandidates, titleFingerprint } from "../src/relevance.js";
+import { scoreRecord, isNovel, rankCandidates, titleFingerprint, HARD_REJECT, SOFT_REJECT } from "../src/relevance.js";
 import { TOPICS } from "../src/topics.js";
 import { records, recordByPmid, emptySeen, NOW } from "./helpers.js";
 
@@ -15,10 +15,18 @@ test("scoreRecord : notice biosimilaire très pertinente pour le sujet biosimila
   assert.ok(reasons.some((r) => r.includes("3 jours")));
 });
 
-test("scoreRecord : erratum et résumé trop court exclus", () => {
-  assert.equal(scoreRecord(recordByPmid("40000003"), topic("biosimilaires"), { now: NOW }).score, -100);
+test("scoreRecord : erratum et résumé trop court exclus définitivement", () => {
+  assert.equal(scoreRecord(recordByPmid("40000003"), topic("biosimilaires"), { now: NOW }).score, HARD_REJECT);
   const short = { ...recordByPmid("40000001"), abstract: "trop court", abstractSections: [] };
-  assert.equal(scoreRecord(short, topic("biosimilaires"), { now: NOW }).score, -100);
+  assert.equal(scoreRecord(short, topic("biosimilaires"), { now: NOW }).score, HARD_REJECT);
+});
+
+test("scoreRecord : sans aucun mot-clé du sujet, la fraîcheur et le type ne suffisent pas", () => {
+  // La notice biosimilaire (essai randomisé, très récente) n'a aucun rapport avec les peptides.
+  const { score, reasons } = scoreRecord(recordByPmid("40000001"), topic("peptides"), { now: NOW });
+  assert.equal(score, SOFT_REJECT);
+  assert.match(reasons[0], /aucun mot-clé/);
+  assert.ok(SOFT_REJECT > HARD_REJECT, "rejet pour ce sujet seulement, pas exclusion définitive");
 });
 
 test("scoreRecord : la pertinence dépend du sujet", () => {
@@ -48,13 +56,17 @@ test("isNovel : PMID, DOI ou titre déjà vus", () => {
   assert.equal(isNovel(r, { ...emptySeen(), titles: new Set([titleFingerprint(r.title)]) }), false);
 });
 
-test("rankCandidates : tri décroissant, filtre nouveauté et score minimal", () => {
+test("rankCandidates : tri décroissant, filtre nouveauté, score minimal, rejets explicites", () => {
   const seen = { ...emptySeen(), pmids: new Set(["40000002"]) };
-  const ranked = rankCandidates(records(), topic("nouveaux-medicaments"), seen, { minScore: 4, now: NOW });
-  assert.ok(ranked.length >= 1);
-  assert.equal(ranked[0].record.pmid, "40000004");
-  assert.ok(!ranked.some((r) => r.record.pmid === "40000002"), "déjà vu exclu");
-  assert.ok(!ranked.some((r) => r.record.pmid === "40000003"), "erratum exclu");
-  for (let i = 1; i < ranked.length; i++) assert.ok(ranked[i - 1].score >= ranked[i].score);
-  assert.equal(rankCandidates(records(), topic("nouveaux-medicaments"), emptySeen(), { minScore: 1000, now: NOW }).length, 0);
+  const { accepted, rejected } = rankCandidates(records(), topic("nouveaux-medicaments"), seen, { minScore: 4, now: NOW });
+  assert.ok(accepted.length >= 1);
+  assert.equal(accepted[0].record.pmid, "40000004");
+  assert.ok(!accepted.some((r) => r.record.pmid === "40000002"), "déjà vu exclu");
+  assert.ok(!rejected.some((r) => r.record.pmid === "40000002"), "déjà vu ni accepté ni rejeté");
+  const erratum = rejected.find((r) => r.record.pmid === "40000003");
+  assert.equal(erratum.score, HARD_REJECT);
+  for (let i = 1; i < accepted.length; i++) assert.ok(accepted[i - 1].score >= accepted[i].score);
+  const strict = rankCandidates(records(), topic("nouveaux-medicaments"), emptySeen(), { minScore: 1000, now: NOW });
+  assert.equal(strict.accepted.length, 0);
+  assert.equal(strict.rejected.length, 4);
 });

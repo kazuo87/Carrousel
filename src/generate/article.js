@@ -91,6 +91,9 @@ export function classifyError(err) {
   if (err instanceof Anthropic.RateLimitError) return "ratelimit";
   if (err instanceof Anthropic.APIConnectionError) return "network";
   if (err instanceof Anthropic.APIError) return "api";
+  // Le SDK signale l'absence d'identifiants (clé, jeton, profil `ant auth login`, fédération…)
+  // par une erreur simple avant toute requête réseau.
+  if (err instanceof Error && !(err instanceof Anthropic.APIError) && /authentication method|apiKey|authToken/i.test(err.message)) return "auth";
   return "unknown";
 }
 
@@ -102,20 +105,20 @@ export class ArticleGenerator {
    * @param {Anthropic} [options.client]  Client injectable (tests)
    */
   constructor({ claude, language = "fr", client } = {}) {
-    this.config = claude;
+    this.config = { ...claude };
     this.language = language;
     this.disabledReason = null;
-    const hasCredentials = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || client);
     if (!claude?.enabled) {
       this.disabledReason = "CLAUDE_ENABLED=false";
-    } else if (!hasCredentials) {
-      this.disabledReason = "ANTHROPIC_API_KEY absente : génération extractive uniquement";
-    }
-    if (this.disabledReason) {
       log.warn(`Claude désactivé (${this.disabledReason})`);
       this.client = null;
     } else {
-      this.client = client ?? new Anthropic({ timeout: claude.timeoutMs, maxRetries: 2 });
+      // Les identifiants (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, profil `ant auth login`,
+      // fédération d'identité) sont résolus par le SDK à la première requête.
+      this.client = client ?? new Anthropic({ timeout: claude.timeoutMs, maxRetries: claude.maxRetries ?? 1 });
+      if (!client && !process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+        log.info("ANTHROPIC_API_KEY absente : le SDK cherchera un profil ou une fédération d'identité ; sinon, génération extractive");
+      }
     }
   }
 
@@ -130,9 +133,11 @@ export class ArticleGenerator {
     } catch (err) {
       const kind = classifyError(err);
       if (kind === "auth") {
-        this.disabledReason = `authentification Anthropic refusée (${err.message})`;
+        this.disabledReason = /authentication method/i.test(err.message)
+          ? "identifiants Anthropic absents (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN ou profil `ant auth login`)"
+          : `identifiants Anthropic refusés (${err.message.split("\n")[0].slice(0, 120)})`;
         this.client = null;
-        log.error(`Claude désactivé pour la suite du processus : ${this.disabledReason}`);
+        log.error(`Claude désactivé pour la suite du processus : ${this.disabledReason} → génération extractive`);
       } else {
         log.warn(`Claude indisponible (${kind}) : ${err.message} → génération extractive`);
       }
@@ -145,9 +150,9 @@ export class ArticleGenerator {
     const params = {
       model,
       max_tokens: maxTokens,
-      system: [
-        { type: "text", text: SYSTEM_PROMPTS[this.language] ?? SYSTEM_PROMPTS.fr, cache_control: { type: "ephemeral" } },
-      ],
+      // Pas de cache_control : le prompt système (~350 jetons) est en dessous du préfixe minimal
+      // mis en cache et la cadence de 6 minutes dépasse la durée de vie par défaut du cache.
+      system: SYSTEM_PROMPTS[this.language] ?? SYSTEM_PROMPTS.fr,
       messages: [{ role: "user", content: formatRecord(record, topic, this.language) }],
       output_config: { effort, format: zodOutputFormat(ArticleSchema) },
     };
@@ -161,11 +166,13 @@ export class ArticleGenerator {
     try {
       response = await this.client.beta.messages.create(params);
     } catch (err) {
-      // Si la bêta de repli n'est pas acceptée (proxy, plateforme tierce…), on retente sans elle.
-      if (params.fallbacks && err instanceof Anthropic.BadRequestError) {
-        log.warn(`Repli serveur refusé (${err.message}) : nouvelle tentative sans fallbacks`);
+      // Si la bêta de repli n'est pas acceptée (proxy, plateforme tierce…), on retente sans elle
+      // une seule fois, puis on s'en souvient pour ne pas payer deux requêtes à chaque tour.
+      if (params.fallbacks && err instanceof Anthropic.BadRequestError && /fallback|beta/i.test(err.message)) {
+        log.warn(`Repli serveur refusé (${err.message.slice(0, 160)}) : nouvelle tentative sans fallbacks, désactivé pour la suite`);
         delete params.betas;
         delete params.fallbacks;
+        this.config.fallbacks = "off";
         response = await this.client.beta.messages.create(params);
       } else {
         throw err;
@@ -179,6 +186,9 @@ export class ArticleGenerator {
     if (response.stop_reason === "max_tokens") {
       throw new Error(`réponse tronquée (max_tokens=${maxTokens})`);
     }
+    // Un bloc « fallback » peut précéder le texte lorsque la requête a été rejouée sur un autre modèle.
+    const fallbackBlock = response.content.find((block) => block.type === "fallback");
+    if (fallbackBlock) log.warn(`Requête rejouée par le serveur : ${fallbackBlock.from?.model} → ${fallbackBlock.to?.model}`);
     const text = response.content
       .filter((block) => block.type === "text")
       .map((block) => block.text)

@@ -93,9 +93,12 @@ export function buildConfig(env = process.env) {
         enabled: bool("CLAUDE_ENABLED", true),
         model: str("CLAUDE_MODEL", "claude-opus-5-5"),
         effort: str("CLAUDE_EFFORT", "medium"),
-        maxTokens: num("CLAUDE_MAX_TOKENS", 8000),
+        // Le raisonnement adaptatif consomme aussi des jetons de sortie : laisser de la marge.
+        maxTokens: num("CLAUDE_MAX_TOKENS", 16000),
         fallbacks: str("CLAUDE_FALLBACKS", "default"), // "default" | "off"
-        timeoutMs: num("CLAUDE_TIMEOUT_MS", 180000),
+        // délai × (tentatives + 1) doit rester inférieur à l'intervalle de génération.
+        timeoutMs: num("CLAUDE_TIMEOUT_MS", 120000),
+        maxRetries: num("CLAUDE_MAX_RETRIES", 1),
       },
 
       // Génération d'image
@@ -116,6 +119,8 @@ export function buildConfig(env = process.env) {
     if (!["low", "medium", "high", "xhigh", "max"].includes(cfg.claude.effort)) {
       throw new Error("CLAUDE_EFFORT doit valoir low, medium, high, xhigh ou max");
     }
+    if (!["default", "off"].includes(cfg.claude.fallbacks)) throw new Error("CLAUDE_FALLBACKS doit valoir default ou off");
+    if (cfg.pubmed.windowsDays.some((d) => !(d > 0))) throw new Error("PUBMED_WINDOWS_DAYS doit contenir des nombres de jours positifs");
     return cfg;
   } finally {
     process.env = saved;

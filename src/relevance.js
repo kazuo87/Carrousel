@@ -6,6 +6,11 @@
  */
 import { createHash } from "node:crypto";
 
+/** Score des notices exclues définitivement (erratum, pas de résumé…) : jamais reprises, quel que soit le sujet. */
+export const HARD_REJECT = -100;
+/** Score des notices sans rapport avec le sujet courant : elles restent candidates pour les autres sujets. */
+export const SOFT_REJECT = -50;
+
 const EXCLUDED_TITLE = /\b(erratum|corrigendum|retraction|retracted|correction to|comment on|author(?:'s)? reply|reply to|withdrawn)\b/i;
 
 const PUBTYPE_BONUS = [
@@ -57,10 +62,10 @@ export function scoreRecord(record, topic, { now = Date.now() } = {}) {
   let score = 0;
 
   if (!record.abstract || record.abstract.length < 400) {
-    return { score: -100, reasons: ["résumé absent ou trop court"] };
+    return { score: HARD_REJECT, reasons: ["résumé absent ou trop court"] };
   }
   if (EXCLUDED_TITLE.test(record.title)) {
-    return { score: -100, reasons: ["erratum / commentaire / rétractation"] };
+    return { score: HARD_REJECT, reasons: ["erratum / commentaire / rétractation"] };
   }
   if (record.language && record.language !== "eng") {
     score -= 3;
@@ -81,6 +86,10 @@ export function scoreRecord(record, topic, { now = Date.now() } = {}) {
     abstractHits += Math.min(countMatches(abstract, keyword), 4);
     meshHits += Math.min(countMatches(mesh, keyword), 2);
     kwHits += Math.min(countMatches(kw, keyword), 2);
+  }
+  if (titleHits + abstractHits + meshHits + kwHits === 0) {
+    // Aucun signal thématique : la fraîcheur ou le type de publication ne doivent pas suffire.
+    return { score: SOFT_REJECT, reasons: ["aucun mot-clé du sujet dans le titre, le résumé, les MeSH ou les mots-clés"] };
   }
   if (titleHits) { score += titleHits * 3; reasons.push(`${titleHits} mot(s)-clé(s) dans le titre`); }
   if (abstractHits) { score += Math.min(abstractHits, 10) * 0.5; reasons.push(`${abstractHits} occurrence(s) dans le résumé`); }
@@ -118,17 +127,20 @@ export function isNovel(record, seen) {
 }
 
 /**
- * Classe les candidats d'un sujet par pertinence décroissante, en ne gardant que les nouveaux
- * et ceux dont le score atteint le minimum.
+ * Classe les candidats d'un sujet par pertinence décroissante.
+ * @returns {{accepted: Array<{record, score, reasons}>, rejected: Array<{record, score, reasons}>}}
+ *   `accepted` : nouveaux et au-dessus du score minimal, triés ; `rejected` : lus mais écartés
+ *   (score ≤ HARD_REJECT = exclusion définitive, sinon rejet pour ce sujet seulement).
  */
 export function rankCandidates(records, topic, seen, { minScore = 4, now = Date.now() } = {}) {
-  const ranked = [];
+  const accepted = [];
+  const rejected = [];
   for (const record of records) {
     if (!isNovel(record, seen)) continue;
     const { score, reasons } = scoreRecord(record, topic, { now });
-    if (score < minScore) continue;
-    ranked.push({ record, score, reasons });
+    if (score < minScore) rejected.push({ record, score, reasons });
+    else accepted.push({ record, score, reasons });
   }
-  ranked.sort((a, b) => b.score - a.score || (b.record.entrezDate || "").localeCompare(a.record.entrezDate || ""));
-  return ranked;
+  accepted.sort((a, b) => b.score - a.score || (b.record.entrezDate || "").localeCompare(a.record.entrezDate || ""));
+  return { accepted, rejected };
 }

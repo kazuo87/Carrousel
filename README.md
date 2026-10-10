@@ -20,7 +20,9 @@ npm start                   # http://localhost:3000
 ```
 
 Le bot génère un premier article immédiatement, puis un nouvel article toutes les 6 minutes
-(`INTERVAL_MINUTES`). Le carrousel se met à jour en direct (flux SSE) sans recharger la page.
+(`INTERVAL_MINUTES`), sur une grille de temps fixe (la durée d'un tour ne décale pas les suivants ; un
+créneau manqué est sauté, pas rattrapé). Le carrousel se met à jour en direct (flux SSE) sans
+recharger la page.
 
 Sans `ANTHROPIC_API_KEY`, le bot fonctionne quand même : les articles sont construits par un
 générateur **extractif** (sections et points clés tirés du résumé PubMed, en anglais). Avec la clé,
@@ -37,20 +39,25 @@ docker compose up -d --build      # lit .env, persiste les données dans le volu
 ### 1. Recherche PubMed (`src/pubmed.js`, `src/topics.js`)
 
 À chaque tour, le bot prend le sujet suivant de la rotation et interroge `esearch.fcgi` avec la
-requête du sujet, restreinte aux notices **ajoutées récemment à PubMed** (`datetype=edat`,
-`reldate=14` jours, puis 60 et 365 jours si rien de nouveau), avec résumé disponible, en anglais, sans
-errata/commentaires/lettres. Les notices retenues sont téléchargées via `efetch.fcgi` (XML) et
-analysées : titre, résumé (structuré ou non), revue, dates, auteurs, DOI, types de publication, MeSH,
-mots-clés.
+requête du sujet, restreinte aux notices **ajoutées récemment à PubMed** (`datetype=edat`) : d'abord
+les 14 derniers jours, puis des fenêtres disjointes de plus en plus anciennes (J-60 à J-14, puis J-365
+à J-60) si rien de nouveau, chaque fenêtre étant parcourue par pages de 40 identifiants (5 pages au
+plus). Les requêtes exigent un résumé disponible, l'anglais, et excluent errata, commentaires et
+lettres. Les notices retenues sont téléchargées via `efetch.fcgi` (XML) et analysées : titre, résumé
+(structuré ou non), revue, dates, auteurs, DOI, types de publication, MeSH, mots-clés.
 
 Le client respecte l'étiquette NCBI : paramètres `tool` et `email`, clé API optionnelle
 (`NCBI_API_KEY`), limitation de débit (3 req/s sans clé, 10 avec), nouvelles tentatives sur 429/5xx.
 
 ### 2. Nouveauté et pertinence (`src/relevance.js`)
 
-- **Nouveauté** : un PMID, un DOI ou un titre normalisé déjà traité n'est jamais repris
-  (`data/seen.json`, persistant entre redémarrages). Les notices lues mais rejetées sont aussi mémorisées.
-- **Pertinence** : score fondé sur les mots-clés du sujet (titre ×3, MeSH ×2, mots-clés auteurs ×1,5,
+- **Nouveauté** : un PMID, un DOI ou un titre normalisé déjà publié n'est jamais repris
+  (`data/seen.json`, persistant entre redémarrages). Les notices lues mais écartées sont aussi
+  mémorisées : définitivement (erratum, résumé absent, identifiant sans notice) ou seulement pour le
+  sujet qui les a rejetées, de sorte qu'un article hors sujet pour « peptides » reste candidat pour
+  « biosimilaires ».
+- **Pertinence** : une notice sans aucun mot-clé du sujet (titre, résumé, MeSH, mots-clés auteurs) est
+  écartée d'office ; sinon son score combine ces mots-clés (titre ×3, MeSH ×2, mots-clés auteurs ×1,5,
   résumé ×0,5), le type de publication (essai randomisé, phase II/III, méta-analyse…), la richesse du
   résumé et la fraîcheur. Errata, rétractations, commentaires et résumés trop courts sont exclus.
   Seules les notices au-dessus de `MIN_RELEVANCE` sont retenues ; sinon le tour passe au sujet suivant.
@@ -60,11 +67,12 @@ Le client respecte l'étiquette NCBI : paramètres `tool` et `email`, clé API o
 Claude (`claude-opus-5-5` par défaut, SDK Anthropic) reçoit la notice complète et renvoie un article
 **structuré** (titre, sous-titre, chapô, sections, points clés, tags, prompt d'illustration, texte
 alternatif) validé par un schéma Zod. Consignes : fidélité stricte au résumé, aucune donnée inventée,
-distinction préclinique/clinique, limites explicites, pas de conseil médical. Le prompt système est
-mis en cache (prompt caching) ; le repli serveur sur refus de politique est activé
-(`CLAUDE_FALLBACKS=default`). En cas de refus, de troncature, de réponse hors schéma ou d'erreur
-réseau/limite de débit, le tour bascule sur le générateur extractif ; une erreur d'authentification
-désactive Claude pour le reste du processus (le bot continue en extractif).
+distinction préclinique/clinique, limites explicites, pas de conseil médical. Le repli serveur sur
+refus de politique est activé (`CLAUDE_FALLBACKS=default`). En cas de refus, de troncature, de réponse
+hors schéma ou d'erreur réseau/limite de débit, le tour bascule sur le générateur extractif ; des
+identifiants absents ou refusés désactivent Claude pour le reste du processus (le bot continue en
+extractif). Les identifiants sont résolus par le SDK (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` ou
+profil `ant auth login`).
 
 ### 4. Illustration (`src/generate/svg-art.js`, `src/generate/image.js`)
 
@@ -77,8 +85,10 @@ désactive Claude pour le reste du processus (le bot continue en extractif).
 ### 5. Carrousel (`public/`, `src/server.js`)
 
 Carrousel accessible (clavier, balayage tactile, lecture/pause, points de navigation, barre de
-progression, filtres par sujet), fiche article complète avec sources (PMID, DOI, revue, auteurs),
-compte à rebours jusqu'au prochain article et insertion en direct des nouveaux articles.
+progression, filtres par sujet, diapositives masquées inertes, respect de `prefers-reduced-motion`),
+fiche article complète avec sources (PMID, DOI, revue, auteurs), compte à rebours jusqu'au prochain
+article, insertion en direct des nouveaux articles (flux SSE, avec rattrapage après une coupure) et
+interface en français ou en anglais selon `ARTICLE_LANGUAGE`.
 
 ## API
 
@@ -91,7 +101,7 @@ compte à rebours jusqu'au prochain article et insertion en direct des nouveaux 
 | GET | `/api/status` | État du planificateur, prochain tour, générateurs utilisés |
 | GET | `/api/events` | Flux SSE : événement `article` à chaque nouvel article |
 | GET | `/images/:fichier` | Illustrations générées |
-| POST | `/api/run` | Déclenche un tour immédiatement (`Authorization: Bearer ADMIN_TOKEN`, ou localhost sans jeton) |
+| POST | `/api/run` | Déclenche un tour immédiatement (`Authorization: Bearer ADMIN_TOKEN` ; sans jeton configuré, seulement depuis une connexion locale directe, sans reverse proxy ni origine navigateur étrangère) |
 | GET | `/healthz` | Sonde de vie |
 
 ## Commandes
@@ -129,10 +139,11 @@ Toutes les options sont documentées dans [`.env.example`](.env.example). Les pl
 
 ### Coût indicatif
 
-À 6 minutes d'intervalle, le bot rédige 240 articles par jour. Avec `claude-opus-5-5` et environ
-2 000 jetons d'entrée (dont le prompt système en cache) et 1 500 jetons de sortie par article, comptez
-de l'ordre de 10 $ par jour ; `CLAUDE_MODEL=claude-sonnet-5-5` divise ce coût par deux. Le générateur
-extractif et les illustrations SVG sont gratuits.
+À 6 minutes d'intervalle, le bot rédige 240 articles par jour. Avec `claude-opus-5-5`, environ
+2 000 jetons d'entrée par article et 1 500 à 3 000 jetons de sortie (article et raisonnement adaptatif
+compris, selon `CLAUDE_EFFORT`), comptez de l'ordre de 10 à 20 $ par jour ;
+`CLAUDE_MODEL=claude-sonnet-5-5` divise ce coût par deux. Le prompt système est trop court pour
+bénéficier du cache de prompts. Le générateur extractif et les illustrations SVG sont gratuits.
 
 ## Structure
 
@@ -158,6 +169,19 @@ public/               carrousel (HTML/CSS/JS sans dépendance)
 test/                 tests node:test, fixtures PubMed, faux serveur E-utilities
 data/                 articles.json, seen.json, state.json, images/ (ignoré par git)
 ```
+
+## Robustesse
+
+- Un fichier de données illisible (écriture interrompue, disque plein) est mis de côté
+  (`*.corrompu-<horodatage>`) et le bot repart des valeurs par défaut ; les fichiers temporaires et
+  les illustrations orphelines sont nettoyés au démarrage.
+- Un sujet en erreur (requête refusée par NCBI, panne) n'empêche pas les autres : le curseur avance et
+  le tour suivant reprend au sujet d'après.
+- Les requêtes réseau (NCBI, Claude, OpenAI) ont toutes un délai maximal ; un tour ne peut pas bloquer
+  indéfiniment le planificateur, et un tour encore en cours fait sauter le créneau suivant plutôt que
+  de se superposer.
+- Les promesses rejetées sans gestionnaire sont journalisées ; une exception non rattrapée arrête le
+  processus avec un code d'erreur (à relancer par Docker ou un superviseur).
 
 ## Avertissement
 

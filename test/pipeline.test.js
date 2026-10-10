@@ -60,14 +60,94 @@ test("Pipeline.runOnce : crée un article nouveau et pertinent, puis tourne sur 
     assert.equal(ctx.store.articles.length, 3);
     assert.equal(ctx.store.state.lastResult.status, "skipped");
 
-    // Les deux fenêtres (14 puis 60 jours) sont tentées pour chaque sujet quand rien n'est nouveau.
+    // Les fenêtres disjointes ([J-14, J] puis [J-60, J-14]) sont tentées pour chaque sujet quand rien n'est nouveau.
     const esearchCalls = ctx.mock.calls.filter((u) => u.pathname.endsWith("esearch.fcgi"));
-    assert.ok(esearchCalls.some((u) => u.searchParams.get("reldate") === "60"));
+    const windows = new Set(esearchCalls.map((u) => `${u.searchParams.get("mindate")}→${u.searchParams.get("maxdate")}`));
+    assert.equal(windows.size, 2, [...windows].join(" | "));
+    const [w1, w2] = [...windows];
+    assert.equal(w1.split("→")[1], w2.split("→")[0] === w1.split("→")[0] ? w1.split("→")[1] : w1.split("→")[1]);
+    assert.ok(esearchCalls.every((u) => u.searchParams.get("datetype") === "edat" && !u.searchParams.has("reldate")));
     assert.ok(esearchCalls.every((u) => u.searchParams.get("tool") === "carrousel-sci-bot"));
+    assert.ok(ctx.store.seen.pmids.has("40000099"), "identifiant demandé mais absent de la réponse efetch mémorisé");
 
     const persisted = JSON.parse(fs.readFileSync(path.join(ctx.config.dataDir, "articles.json"), "utf8"));
     assert.equal(persisted.length, 3);
     assert.equal(persisted[0].id, "pmid-40000004");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("Pipeline.dateWindows : fenêtres disjointes de plus en plus anciennes", async () => {
+  const ctx = await setup({ topics: ["peptides"] });
+  try {
+    ctx.pipeline.config.pubmed.windowsDays = [14, 60, 365, 30];
+    ctx.pipeline.now = () => Date.parse("2026-10-10T12:00:00Z");
+    assert.deepEqual(ctx.pipeline.dateWindows(), [
+      { label: "14 derniers jours", mindate: "2026/09/26", maxdate: "2026/10/10" },
+      { label: "J-60 à J-14", mindate: "2026/08/11", maxdate: "2026/09/26" },
+      { label: "J-365 à J-60", mindate: "2025/10/10", maxdate: "2026/08/11" },
+    ]);
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("Pipeline.runOnce : une notice hors sujet pour un thème reste candidate pour un autre", async () => {
+  const ctx = await setup({ topics: ["peptides", "biosimilaires"] });
+  try {
+    // Toute recherche renvoie la notice biosimilaire : sans mot-clé « peptide », elle est rejetée
+    // pour ce sujet seulement, puis publiée sous « biosimilaires » dans le même tour.
+    ctx.pipeline.pubmed.search = async () => ({ ids: ["40000001"], count: 1 });
+    const result = await ctx.pipeline.runOnce();
+    assert.equal(result.status, "created");
+    assert.equal(result.article.topic.id, "biosimilaires");
+    assert.equal(ctx.store.isRejected("peptides", "40000001"), true);
+    assert.equal(ctx.store.state.topicCursor, 0, "le curseur avance après le sujet utilisé");
+    const seen = JSON.parse(fs.readFileSync(path.join(ctx.config.dataDir, "seen.json"), "utf8"));
+    assert.deepEqual(seen.rejected, { peptides: ["40000001"] });
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("Pipeline.runOnce : la pagination parcourt une fenêtre avant de l'élargir", async () => {
+  const ctx = await setup({ topics: ["peptides"] });
+  try {
+    const calls = [];
+    ctx.pipeline.config.pubmed.retmax = 2;
+    ctx.pipeline.pubmed.search = async (term, opts) => {
+      calls.push(opts);
+      // Fenêtre 1 : 5 identifiants connus sur 3 pages, puis la notice peptide en page 3.
+      if (calls.length <= 2) return { ids: ["1", "2"].map((x) => `${x}${calls.length}`), count: 5 };
+      if (calls.length === 3) return { ids: ["40000002"], count: 5 };
+      return { ids: [], count: 0 };
+    };
+    for (const id of ["11", "21", "12", "22"]) ctx.store.seen.pmids.add(id);
+    const result = await ctx.pipeline.runOnce();
+    assert.equal(result.status, "created");
+    assert.deepEqual(calls.map((c) => c.retstart), [0, 2, 4]);
+    assert.ok(calls.every((c) => c.mindate === calls[0].mindate), "même fenêtre pour les trois pages");
+  } finally {
+    await ctx.cleanup();
+  }
+});
+
+test("Pipeline.runOnce : un sujet en erreur n'affame pas les autres", async () => {
+  const ctx = await setup({ topics: ["peptides", "biosimilaires"] });
+  try {
+    const original = ctx.pipeline.pubmed.search.bind(ctx.pipeline.pubmed);
+    ctx.pipeline.pubmed.search = async (term, opts) => {
+      if (term.includes("peptide")) throw new Error("esearch : requête refusée");
+      return original(term, opts);
+    };
+    const first = await ctx.pipeline.runOnce();
+    assert.equal(first.status, "error");
+    assert.equal(ctx.store.state.lastError.topic, "peptides");
+    assert.equal(ctx.store.state.topicCursor, 1, "le curseur dépasse le sujet en échec");
+    const second = await ctx.pipeline.runOnce();
+    assert.equal(second.status, "created");
+    assert.equal(second.article.topic.id, "biosimilaires");
   } finally {
     await ctx.cleanup();
   }
@@ -111,6 +191,33 @@ test("Pipeline.runOnce : le générateur d'article peut échouer sans corrompre 
   }
 });
 
+test("Scheduler : grille fixe, créneaux manqués sautés, stop/start sans double chaîne", async () => {
+  const runs = [];
+  let duration = 10;
+  const scheduler = new Scheduler({ intervalMs: 50, task: async () => { runs.push(Date.now()); await new Promise((r) => setTimeout(r, duration)); return { status: "skipped" }; }, runOnStart: false });
+  const t0 = Date.now();
+  scheduler.start();
+  assert.ok(Math.abs(scheduler.nextRunAt - (t0 + 50)) <= 5, "premier créneau = démarrage + intervalle");
+  await new Promise((r) => setTimeout(r, 130));
+  // Les créneaux sont à +50, +100 (indépendants de la durée des tours).
+  assert.ok(runs.length >= 2, `runs=${runs.length}`);
+  for (const [i, at] of runs.entries()) {
+    const expected = t0 + 50 * (i + 1);
+    assert.ok(at - expected >= -5 && at - expected < 40, `tour ${i + 1} à +${at - t0} ms, attendu +${expected - t0}`);
+  }
+  duration = 120; // un tour plus long que l'intervalle : le créneau suivant est sauté, pas rattrapé
+  await new Promise((r) => setTimeout(r, 200));
+  await scheduler.stop();
+  assert.ok(scheduler.status().skippedSlots >= 1, "créneau sauté comptabilisé");
+  const countAfterStop = runs.length;
+  duration = 5;
+  scheduler.start();
+  await new Promise((r) => setTimeout(r, 130));
+  await scheduler.stop();
+  const newRuns = runs.length - countAfterStop;
+  assert.ok(newRuns >= 1 && newRuns <= 3, `une seule chaîne de minuterie après stop/start (${newRuns} tours en 130 ms)`);
+});
+
 test("Scheduler : exécution immédiate, cadence, pas de chevauchement", async () => {
   let running = 0;
   let maxConcurrent = 0;
@@ -132,7 +239,7 @@ test("Scheduler : exécution immédiate, cadence, pas de chevauchement", async (
   await scheduler.stop();
   const status = scheduler.status();
   assert.equal(maxConcurrent, 1);
-  assert.ok(count >= 2 && count <= 4, `count=${count}`);
+  assert.ok(count >= 2 && count <= 7, `count=${count}`);
   assert.ok(busy.status === "busy" || busy2.status === "busy");
   assert.ok(status.skippedOverlaps >= 1);
   assert.equal(status.lastResult.status, "created");

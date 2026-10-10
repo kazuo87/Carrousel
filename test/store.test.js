@@ -32,8 +32,17 @@ test("Store : persistance, nouveauté et rechargement", async () => {
     assert.ok(store.seen.dois.has("10.1/1"));
     assert.deepEqual(events, ["pmid-1", "pmid-2", "pmid-3", "pmid-4"]);
 
+    store.markRejected("peptides", "77");
+    await store.saveSeen();
     await store.saveState({ topicCursor: 2, runs: 7 });
+    fs.writeFileSync(path.join(images, "orphan.svg"), "<svg/>");
+    fs.writeFileSync(path.join(dir, "articles.json.123.456.tmp"), "{");
     const reloaded = await new Store({ dataDir: dir, imagesDir: images, maxArticles: 3 }).init();
+    assert.equal(reloaded.isRejected("peptides", "77"), true);
+    assert.equal(reloaded.isRejected("biosimilaires", "77"), false);
+    assert.equal(fs.existsSync(path.join(images, "orphan.svg")), false, "illustration orpheline supprimée");
+    assert.equal(fs.existsSync(path.join(images, "pmid-4.svg")), true, "illustration référencée conservée");
+    assert.equal(fs.existsSync(path.join(dir, "articles.json.123.456.tmp")), false, "fichier temporaire nettoyé");
     assert.deepEqual(reloaded.articles.map((a) => a.id), ["pmid-4", "pmid-3", "pmid-2"]);
     assert.ok(reloaded.seen.pmids.has("1") && reloaded.seen.pmids.has("4"));
     assert.equal(reloaded.state.topicCursor, 2);
@@ -48,11 +57,34 @@ test("Store : persistance, nouveauté et rechargement", async () => {
   }
 });
 
-test("Store : fichier corrompu → erreur explicite", async () => {
+test("Store : fichier corrompu → mis de côté, reprise avec les valeurs par défaut", async () => {
   const { dir, images, cleanup } = await tmpDir();
   try {
     fs.writeFileSync(path.join(dir, "articles.json"), "{not json");
-    await assert.rejects(new Store({ dataDir: dir, imagesDir: images }).init(), /articles\.json illisible/);
+    fs.writeFileSync(path.join(dir, "seen.json"), "");
+    const store = await new Store({ dataDir: dir, imagesDir: images }).init();
+    assert.deepEqual(store.articles, []);
+    assert.equal(store.seen.pmids.size, 0);
+    const files = fs.readdirSync(dir);
+    assert.ok(files.some((f) => f.startsWith("articles.json.corrompu-")), files.join());
+    assert.ok(files.some((f) => f.startsWith("seen.json.corrompu-")), files.join());
+  } finally {
+    await cleanup();
+  }
+});
+
+test("Store : l'index de nouveauté est borné aux PMID les plus récents", async () => {
+  const { dir, images, cleanup } = await tmpDir();
+  try {
+    const { MAX_SEEN_PMIDS } = await import("../src/store.js");
+    const store = await new Store({ dataDir: dir, imagesDir: images }).init();
+    for (let i = 1; i <= MAX_SEEN_PMIDS + 10; i++) store.seen.pmids.add(String(i));
+    store.markRejected("peptides", "3");
+    store.pruneSeen();
+    assert.equal(store.seen.pmids.size, MAX_SEEN_PMIDS);
+    assert.equal(store.seen.pmids.has("1"), false);
+    assert.equal(store.seen.pmids.has(String(MAX_SEEN_PMIDS + 10)), true);
+    assert.equal(store.isRejected("peptides", "3"), false, "rejet oublié avec le PMID");
   } finally {
     await cleanup();
   }

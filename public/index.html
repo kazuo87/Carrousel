@@ -13,14 +13,14 @@
     <div class="brand">
       <span class="brand-dot" aria-hidden="true"></span>
       <div>
-        <h1>Carrousel scientifique</h1>
-        <p class="brand-sub">Pharma · peptides · nouveaux médicaments · biosimilaires — à partir de PubMed / NCBI</p>
+        <h1 data-i18n="title">Carrousel scientifique</h1>
+        <p class="brand-sub" data-i18n="subtitle">Pharma · peptides · nouveaux médicaments · biosimilaires — à partir de PubMed / NCBI</p>
       </div>
     </div>
-    <div class="status" aria-live="polite">
-      <span id="status-count">—</span>
+    <div class="status">
+      <span id="status-count" aria-live="polite">—</span>
       <span class="sep" aria-hidden="true">·</span>
-      <span id="status-next">Prochain article : —</span>
+      <span id="status-next">—</span>
     </div>
   </header>
 
@@ -34,13 +34,13 @@
       </div>
       <button class="nav next" id="next" type="button" aria-label="Article suivant">&#x203A;</button>
       <div class="controls">
-        <button class="play" id="play" type="button" aria-pressed="true" aria-label="Mettre en pause le défilement automatique">❚❚</button>
+        <button class="play" id="play" type="button" aria-pressed="true" aria-label="Défilement automatique">❚❚</button>
         <ol class="dots" id="dots" aria-label="Choisir un article"></ol>
         <span class="counter" id="counter"></span>
       </div>
       <div class="progress" id="progress" aria-hidden="true"><span></span></div>
     </section>
-    <p class="empty" id="empty" hidden>Aucun article pour le moment : le premier sera généré dans quelques instants.</p>
+    <p class="empty" id="empty" hidden></p>
   </main>
 
   <dialog id="reader" aria-labelledby="reader-title">
@@ -50,10 +50,10 @@
     </article>
   </dialog>
 
-  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <button class="toast" id="toast" type="button" hidden></button>
 
   <footer class="foot">
-    <p>Contenus générés automatiquement à partir des résumés PubMed ; ils ne constituent pas un avis médical. Sources citées sur chaque fiche.</p>
+    <p data-i18n="footer">Contenus générés automatiquement à partir des résumés PubMed ; ils ne constituent pas un avis médical. Sources citées sur chaque fiche.</p>
   </footer>
 
   <script src="/app.js"></script>

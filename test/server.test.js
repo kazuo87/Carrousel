@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { createServer, publicArticle } from "../src/server.js";
+import net from "node:net";
+import { createServer, publicArticle, publicErrorMessage } from "../src/server.js";
 import { Store } from "../src/store.js";
 import { Scheduler } from "../src/scheduler.js";
 import { getTopics } from "../src/topics.js";
@@ -27,7 +28,8 @@ async function startApp({ adminToken = "", withScheduler = true } = {}) {
   const runs = [];
   const runNow = async () => { runs.push(1); const a = sample(100 + runs.length); fs.writeFileSync(path.join(images, a.image.file), "<svg/>"); await store.addArticle(a); return { status: "created", article: a }; };
   const scheduler = withScheduler ? new Scheduler({ intervalMs: 60_000, task: runNow, runOnStart: false }) : null;
-  const server = createServer({ config, store, scheduler, runNow, topics: getTopics([]), meta: { article: "extractive", image: "svg" } });
+  await store.saveState({ lastError: { at: "2026-10-10T00:00:00Z", message: "Fichier /srv/carrousel/data/seen.json illisible : EACCES" } });
+  const server = createServer({ config, store, scheduler, runNow, topics: getTopics([]), meta: { article: "extractive (ANTHROPIC_API_KEY absente)", image: "svg" } });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, store, runs, config, close: async () => { await new Promise((r) => server.close(r)); await cleanup(); } };
@@ -65,7 +67,15 @@ test("serveur : page, API, images et sécurité", async () => {
     assert.equal(status.articleCount, 1);
     assert.equal(status.intervalMinutes, 6);
     assert.equal(status.scheduler.running, false);
-    assert.equal(status.generators.article, "extractive");
+    assert.equal(status.generators.article, "extractive (ANTHROPIC_API_KEY absente)");
+    assert.equal(status.state.lastError.message, "Fichier … illisible : EACCES", "chemins absolus masqués");
+
+    const headHome = await fetch(`${app.base}/`, { method: "HEAD" });
+    assert.equal(headHome.status, 200);
+    assert.equal((await headHome.text()).length, 0);
+    const headImg = await fetch(`${app.base}/images/pmid-1.svg`, { method: "HEAD" });
+    assert.equal(headImg.status, 200);
+    assert.ok(Number(headImg.headers.get("content-length")) > 0);
 
     const img = await fetch(`${app.base}/images/pmid-1.svg`);
     assert.equal(img.status, 200);
@@ -73,6 +83,7 @@ test("serveur : page, API, images et sécurité", async () => {
     assert.match(img.headers.get("content-security-policy"), /default-src 'none'/);
     assert.equal((await fetch(`${app.base}/images/missing.svg`)).status, 404);
     assert.equal((await fetch(`${app.base}/images/..%2Farticles.json`)).status, 400, "traversée de répertoire refusée");
+    assert.equal((await fetch(`${app.base}/images/%E0%A4%A`)).status, 400, "encodage pour-cent invalide → 400");
     assert.equal((await fetch(`${app.base}/images/.hidden`)).status, 400);
     assert.equal((await fetch(`${app.base}/..%2Fpackage.json`)).status, 404);
     assert.equal((await fetch(`${app.base}/healthz`)).status, 200);
@@ -119,6 +130,39 @@ test("serveur : déclenchement manuel (loopback sans jeton, jeton requis sinon) 
   }
 });
 
+test("serveur : une ligne de requête malformée répond 400 sans tuer le processus", async () => {
+  const app = await startApp();
+  try {
+    const port = Number(new URL(app.base).port);
+    for (const target of ["http://a:b:c/", "http://[::1", "http://x:99999/"]) {
+      const reply = await new Promise((resolve, reject) => {
+        const sock = net.connect(port, "127.0.0.1", () => sock.write(`GET ${target} HTTP/1.1\r\nHost: x\r\n\r\n`));
+        let data = "";
+        sock.on("data", (d) => { data += d; if (/\r\n\r\n/.test(data)) sock.end(); });
+        sock.on("close", () => resolve(data));
+        sock.on("error", reject);
+        setTimeout(() => sock.destroy(new Error("timeout")), 3000);
+      });
+      assert.match(reply, /^HTTP\/1\.1 400/, `${target} → ${reply.slice(0, 40)}`);
+    }
+    assert.equal((await fetch(`${app.base}/healthz`)).status, 200, "le serveur est toujours vivant");
+  } finally {
+    await app.close();
+  }
+});
+
+test("serveur : sans ADMIN_TOKEN, le déclenchement exige une connexion locale directe", async () => {
+  const app = await startApp();
+  try {
+    assert.equal((await fetch(`${app.base}/api/run`, { method: "POST", headers: { "X-Forwarded-For": "203.0.113.9" } })).status, 401, "derrière un reverse proxy → jeton requis");
+    assert.equal((await fetch(`${app.base}/api/run`, { method: "POST", headers: { Origin: "https://evil.example" } })).status, 401, "origine navigateur étrangère → refus (anti-CSRF)");
+    assert.equal((await fetch(`${app.base}/api/run`, { method: "POST", headers: { Origin: app.base } })).status, 200, "même origine → accepté");
+    assert.equal(app.runs.length, 1);
+  } finally {
+    await app.close();
+  }
+});
+
 test("serveur : ADMIN_TOKEN protège le déclenchement", async () => {
   const app = await startApp({ adminToken: "secret-token" });
   try {
@@ -130,6 +174,13 @@ test("serveur : ADMIN_TOKEN protège le déclenchement", async () => {
   } finally {
     await app.close();
   }
+});
+
+test("publicErrorMessage : masque les chemins et tronque", () => {
+  assert.equal(publicErrorMessage("NCBI esearch a répondu 500: <html>…"), "NCBI esearch a répondu 500: <html>…");
+  assert.equal(publicErrorMessage("ENOENT: open '/var/lib/app/data/x.svg'"), "ENOENT: open '…'");
+  assert.equal(publicErrorMessage("x".repeat(300)).length, 200);
+  assert.equal(publicErrorMessage(""), null);
 });
 
 test("publicArticle : masque le fichier local", () => {

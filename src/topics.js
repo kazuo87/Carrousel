@@ -67,8 +67,10 @@ export const TOPICS = [
   {
     id: "essais-cliniques",
     label: { fr: "Essais cliniques", en: "Clinical trials" },
+    // Les champs [pt]/[sh]/[MeSH] sont attribués par la NLM après indexation : une branche texte
+    // permet de repérer les essais fraîchement entrés dans PubMed.
     query:
-      '(("randomized controlled trial"[pt] OR "clinical trial, phase ii"[pt] OR "clinical trial, phase iii"[pt]) AND ("drug therapy"[sh] OR "pharmacology"[sh] OR "Drug Therapy"[MeSH]))',
+      '((("randomized controlled trial"[pt] OR "clinical trial, phase ii"[pt] OR "clinical trial, phase iii"[pt]) AND ("drug therapy"[sh] OR "pharmacology"[sh] OR "Drug Therapy"[MeSH])) OR ("randomized"[tiab] AND ("placebo"[tiab] OR "double-blind"[tiab]) AND ("phase 2"[tiab] OR "phase 3"[tiab] OR "phase II"[tiab] OR "phase III"[tiab])))',
     keywords: [
       "randomized", "placebo", "double-blind", "endpoint", "hazard ratio", "efficacy", "adverse",
       "phase", "trial", "participants", "patients", "treatment",
@@ -94,7 +96,7 @@ export const TOPICS = [
     query:
       '("new antibiotic"[tiab] OR "novel antibiotic"[tiab] OR "antimicrobial resistance"[tiab] OR "antifungal"[tiab] OR "antiviral"[tiab] OR "Anti-Bacterial Agents"[MeSH] OR "Drug Resistance, Microbial"[MeSH])',
     keywords: [
-      "antibiotic", "antimicrobial", "resistance", "antifungal", "antiviral", "mic", "pathogen",
+      "antibiotic", "antimicrobial", "resistance", "antifungal", "antiviral", "inhibitory concentration", "pathogen",
       "bacteria", "gram-negative", "carbapenem", "infection", "susceptibility",
     ],
     theme: "cells",
